@@ -115,6 +115,7 @@ test('autosave can be restored from IndexedDB', async ({ page }) => {
   await page.setInputFiles('.modal input[type=file]', fixture);
   await page.locator('.modal').getByRole('button', { name: '导入', exact: true }).click();
   await expect(page.getByText('test-gradient.dng').first()).toBeVisible({ timeout: 20_000 });
+  await expect.poll(() => page.evaluate(() => window.__rawlab.useStore.getState().order.length), { timeout: 30_000 }).toBe(1);
   await page.waitForTimeout(2600);
 
   await page.reload();
