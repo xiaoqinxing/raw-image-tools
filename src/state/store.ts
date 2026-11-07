@@ -70,6 +70,7 @@ interface State {
   dirty: boolean;
   showImport: boolean;
   showExport: boolean;
+  showChangelog: boolean;
   presets: Preset[];
   selectedPresetId: string | null;
   split: number;
@@ -109,6 +110,7 @@ interface State {
   setDirty: (dirty: boolean) => void;
   setShowImport: (show: boolean) => void;
   setShowExport: (show: boolean) => void;
+  setShowChangelog: (show: boolean) => void;
   setPresets: (presets: Preset[]) => void;
   setSelectedPresetId: (id: string | null) => void;
   setTool: (tool: ToolMode) => void;
@@ -145,6 +147,7 @@ const initialState = {
   dirty: false,
   showImport: false,
   showExport: false,
+  showChangelog: false,
   presets: [] as Preset[],
   selectedPresetId: null as string | null,
   split: 0.5,
@@ -244,6 +247,7 @@ export const useStore = create<State>((set, get) => ({
   setDirty: (dirty) => set({ dirty }),
   setShowImport: (showImport) => set({ showImport }),
   setShowExport: (showExport) => set({ showExport }),
+  setShowChangelog: (showChangelog) => set({ showChangelog }),
   setPresets: (presets) => set({ presets }),
   setSelectedPresetId: (selectedPresetId) => set({ selectedPresetId }),
   setTool: (tool) => set({ tool }),

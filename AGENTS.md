@@ -25,17 +25,20 @@ RAW Lab 是一个纯浏览器 RAW 图像编辑与 ISP 分析工作台：
 - **不要静默降级。** 超过资源上限、DNG 标签未执行、AHD 近似实现等限制必须继续在 UI / 文档中说明。
 - **桌面功能不能在移动端消失。** 侧栏可以变抽屉、面板可以折叠，但导入、导出、分析、工程等能力必须可达。
 - **README 不写提示词。** 需要新增的 AI prompt、仓库工作流和内部规则写入本文件。
+- **版本号自动生成。** 显示版本 = `package.json` 的 major.minor + Git 提交数，更新日志来自 `git log`；不要手动硬编码版本或在状态栏写死提交信息。
 - **许可证文件保持完整。** 修改 `public/libraw/` 相关内容时，同步检查 `NOTICE` 与 `THIRD_PARTY_NOTICES.md`。
 
 ## 快速上下文
 
 ```text
 src/core/        RAW 解码、CFA、色彩矩阵、管线参数、CPU 参考、分析
+src/core/build-info.ts  版本号与 git log 解析（纯函数，可单测）
+src/build-info.ts       Vite define 注入的构建元数据
 src/gpu/         WebGL2 Renderer 与 shader
 src/workers/     decode.worker / render.worker
 src/services/    editor 编排、session、项目、benchmark
 src/state/       Zustand store
-src/ui/          工作台 UI
+src/ui/          工作台 UI；ChangelogDialog.tsx 为更新日志弹窗
 tests/unit/      Vitest 数值测试
 tests/e2e/       Playwright E2E
 tests/fixtures/  合成 RAW / DNG 测试数据
@@ -79,7 +82,8 @@ npm run build
    ```
 
 5. 如果测试数量、性能数据、功能范围或已知限制发生变化，同步更新 `docs/02-acceptance.md` 和 README 中对应描述。
-6. 检查 `git diff`，确认没有夹具、构建产物、临时脚本或截图误入提交。
+6. 版本号与更新日志由 `vite.config.ts` 在构建时从 Git 历史生成（`__BUILD_INFO__`）；CI checkout 必须使用 `fetch-depth: 0`，否则提交数和更新日志会被截断。
+7. 检查 `git diff`，确认没有夹具、构建产物、临时脚本或截图误入提交。
 
 ## 测试约定
 

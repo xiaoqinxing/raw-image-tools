@@ -3,6 +3,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { useStore } from '../state/store';
 import { openProjectFile, saveProject, relinkProjectImage, finishProjectRelink, restoreAutosave } from '../services/editor';
 import { Button } from './controls';
+import { BUILD_INFO } from '../build-info';
 
 export function ProjectMenu() {
   const [open, setOpen] = React.useState(false);
@@ -10,6 +11,7 @@ export function ProjectMenu() {
   const rootRef = React.useRef<HTMLDivElement>(null);
   const projectName = useStore((s) => s.projectName);
   const setProjectName = useStore((s) => s.setProjectName);
+  const setShowChangelog = useStore((s) => s.setShowChangelog);
   React.useEffect(() => {
     if (!open) return;
     const onPointerDown = (e: PointerEvent) => {
@@ -31,6 +33,14 @@ export function ProjectMenu() {
           <button className="block w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-ink-800" onClick={() => { setOpen(false); saveProject(); }}>保存工程 JSON</button>
           <button className="block w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-ink-800" onClick={() => { setOpen(false); ref.current?.click(); }}>打开工程…</button>
           <button className="block w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-ink-800" onClick={() => { setOpen(false); restoreAutosave(); }}>恢复自动保存</button>
+          <div className="my-1 h-px bg-ink-700" />
+          <button
+            className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[11px] hover:bg-ink-800"
+            onClick={() => { setOpen(false); setShowChangelog(true); }}
+          >
+            <span>更新日志…</span>
+            <span className="mono text-[9px] text-ink-500">v{BUILD_INFO.version}</span>
+          </button>
           <div className="px-2 py-1 text-[9px] leading-4 text-ink-500">工程不嵌入 RAW；重开时重新关联。</div>
           <input ref={ref} type="file" accept=".json,.rawlab.json" className="hidden" onChange={(e) => {
             const f = e.target.files?.[0];

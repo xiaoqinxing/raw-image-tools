@@ -7,10 +7,12 @@ import { AnalysisDock } from './ui/AnalysisDock';
 import { CompareView } from './ui/CompareView';
 import { ImportDialog } from './ui/ImportDialog';
 import { ExportDialog } from './ui/ExportDialog';
+import { ChangelogDialog } from './ui/ChangelogDialog';
 import { RelinkDialog } from './ui/ProjectMenu';
 import { useActiveDoc, useStore } from './state/store';
 import { analyze, autosaveProject, fitView, loadPresets, renderActive, setStageBypassAndRender } from './services/editor';
 import { paramsHash } from './core/pipeline/params';
+import { BUILD_INFO } from './build-info';
 
 function StatusBar() {
   const doc = useActiveDoc();
@@ -18,9 +20,17 @@ function StatusBar() {
   const busyLabel = useStore((s) => s.busyLabel);
   const selectedStage = useStore((s) => s.selectedStage);
   const viewport = useStore((s) => s.viewport);
+  const setShowChangelog = useStore((s) => s.setShowChangelog);
   return (
     <footer className="statusbar flex h-6 shrink-0 items-center gap-3 border-t border-ink-700 bg-ink-850 px-3 text-[10px] text-ink-500">
-      <span>RAW Lab 0.1.0</span>
+      <span className="shrink-0">RAW Lab</span>
+      <button
+        type="button"
+        data-testid="app-version"
+        className="mono -mx-1 shrink-0 rounded px-1 py-0.5 text-ink-400 hover:bg-ink-800 hover:text-ink-100"
+        title={`版本 v${BUILD_INFO.version}${BUILD_INFO.shortCommit ? ` · ${BUILD_INFO.shortCommit}` : ''} · 点击查看更新日志`}
+        onClick={() => setShowChangelog(true)}
+      >v{BUILD_INFO.version}</button>
       {doc ? (
         <>
           <span className="mono">{doc.meta.geometry.active.w}×{doc.meta.geometry.active.h}</span>
@@ -119,6 +129,7 @@ export default function App() {
       if (e.key === 'Escape') {
         useStore.getState().setShowImport(false);
         useStore.getState().setShowExport(false);
+        useStore.getState().setShowChangelog(false);
         setToast(null);
       }
       if (!doc) return;
@@ -162,6 +173,7 @@ export default function App() {
       ) : null}
       <ImportDialog />
       <ExportDialog />
+      <ChangelogDialog />
       <RelinkDialog />
       {toast ? (
         <div className="toast" onClick={() => setToast(null)}>

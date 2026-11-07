@@ -1,7 +1,7 @@
 # 实现与验收记录
 
 日期：2026-11-07
-版本：0.1.0
+版本：0.1.0（初始验收基线；当前版本由构建自动生成）
 环境：Linux，Node 18.19.1，无头 Chromium（headless shell 1194），
 `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader`，
 viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
@@ -13,7 +13,7 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 
 | 套件 | 数量 | 结果 |
 |------|------|------|
-| Vitest 单元/数值 | 71 | 全部通过 |
+| Vitest 单元/数值 | 75 | 全部通过 |
 | Playwright E2E：DNG 导入 / 阶段 / 16-bit 导出 / 工程保存 | 1 | 通过 |
 | Playwright E2E：裸 RAW 导入 + 错误配置 | 1 | 通过 |
 | Playwright E2E：ColorChecker 四角 + CCM 拟合 | 1 | 通过 |
@@ -25,7 +25,8 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 | Playwright E2E：Bilateral 降噪 shader | 1 | 通过 |
 | Playwright E2E：预设保存 / 应用 / 导出 | 1 | 通过 |
 | Playwright E2E：桌面 / 平板 / 手机 / 横屏响应式布局与抽屉 | 1 | 通过 |
-| **E2E 合计** | **11** | **全部通过** |
+| Playwright E2E：状态栏版本号 + 自动更新日志弹窗 | 1 | 通过 |
+| **E2E 合计** | **12** | **全部通过** |
 
 覆盖的数值测试：
 
@@ -36,6 +37,7 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 - 去马赛克：Bilinear / MHC / AHD 常量保持，MHC 与 GPU 结果最大误差约 1.7e-4。
 - 分析：直方图、SNR（高斯噪声 <0.2 dB）、MTF50（高斯模糊斜边误差 <5%）、白噪声频谱平坦度、CCM 最小二乘恢复（mean ΔE00 < 1）。
 - ColorChecker：合成色卡 mean ΔE00 ≈ 0.01，max ≈ 0.03。
+- 构建信息：版本号 = package major.minor + Git 提交数；git log 解析与异常行过滤。
 
 ## 性能实测
 

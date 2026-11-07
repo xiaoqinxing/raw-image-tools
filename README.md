@@ -100,6 +100,12 @@ RAW Lab 反过来，把 **从 CFA 到 sRGB 的整条 ISP 管线摊开给你看**
 - 快照保存同一 RAW 的多组参数，可应用或作为 A/B 参考。
 - **2–4 图对比**：2H / 2V / 4 格布局、同步缩放/平移、独立参数、点击标题切换编辑对象、交换 A/B。
 
+### 版本与更新日志
+
+- 版本号由构建自动生成：`package.json` 的 major.minor + Git 提交数，每次 push 自动递增，无需手动改版本。
+- 更新日志来自 `git log`，点击界面底部的版本号，或打开「工程 → 更新日志…」即可查看。
+- CI / 生产部署 / Pages 镜像都使用完整 Git 历史构建，版本与提交记录保持一致。
+
 ### 响应式界面
 
 - ≥1200px：左图像栏、中央画布/分析、右 ISP 管线三栏布局。
@@ -169,9 +175,9 @@ npm run dev          # http://127.0.0.1:5173
 
 ```bash
 npm run typecheck
-npm test             # Vitest：71 个单元/数值测试
+npm test             # Vitest：75 个单元/数值测试
 npx playwright install chromium
-npm run test:e2e     # Playwright：11 个 E2E
+npm run test:e2e     # Playwright：12 个 E2E
 npm run build
 ```
 
