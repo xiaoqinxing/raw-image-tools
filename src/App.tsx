@@ -10,6 +10,7 @@ import { ExportDialog } from './ui/ExportDialog';
 import { RelinkDialog } from './ui/ProjectMenu';
 import { useActiveDoc, useStore } from './state/store';
 import { analyze, autosaveProject, fitView, loadPresets, renderActive, setStageBypassAndRender } from './services/editor';
+import { paramsHash } from './core/pipeline/params';
 
 function StatusBar() {
   const doc = useActiveDoc();
@@ -96,15 +97,20 @@ export default function App() {
     return () => window.clearTimeout(t);
   }, [order, docs, projectName]);
 
-  const lastHistogramFor = React.useRef<string | null>(null);
   React.useEffect(() => {
     if (!doc || doc.status !== 'ready' || !doc.stats) return;
-    const key = `${doc.id}:${analysisStage}:${doc.generation}`;
-    if (lastHistogramFor.current === key) return;
-    lastHistogramFor.current = key;
-    const t = window.setTimeout(() => analyze('histogram', { bins: 1024 }), 350);
+    const current = doc.analysis.histogram;
+    if (current?.kind === 'histogram' && current.paramsHash === paramsHash(doc.params)) return;
+    const id = doc.id;
+    // Debounce re-renders during decode/resize. If the timer is cancelled by a
+    // newer generation, the next effect run schedules it again.
+    const t = window.setTimeout(() => {
+      const latest = useStore.getState().docs[id];
+      if (!latest || latest.status !== 'ready') return;
+      void analyze('histogram', { bins: 1024 });
+    }, 350);
     return () => window.clearTimeout(t);
-  }, [doc?.id, doc?.generation, doc?.stats?.timings.totalMs]);
+  }, [doc?.id, doc?.generation, doc?.stats?.timings.totalMs, doc?.analysis.histogram]);
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
