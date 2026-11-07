@@ -1,59 +1,68 @@
+<div align="center">
+
 # RAW Lab
+
+**把 ISP 实验室装进浏览器。**
+
+DNG / 裸 RAW → 黑白电平 → 平场 → 白平衡 → 去马赛克 → 降噪 → CCM → CSC → Gamma → USM → PNG  
+解码、处理、分析、导出全部在本地完成，无后端、无上传、无账号。
 
 [![CI](https://github.com/xiaoqinxing/raw-image-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaoqinxing/raw-image-tools/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![WebGL2](https://img.shields.io/badge/WebGL2-GPU-5c3ee8.svg)](#技术架构)
+[![LibRaw WASM](https://img.shields.io/badge/LibRaw-WASM-orange.svg)](THIRD_PARTY_NOTICES.md)
+[![No Backend](https://img.shields.io/badge/backend-none-2ea44f.svg)](#为什么是-raw-lab)
 
-纯浏览器、暗色专业风格的 RAW 图像编辑与 ISP 分析工作台。DNG / 裸 RAW 导入、固定 10 阶段管线、ColorChecker 拟合、ISP 分析、工程 / 预设与多图对比全部在本地完成，无后端、无上传。
+**[在线体验](https://raw-image.li.qinxing.xyz)** · **[核心功能](#核心功能)** · **[技术架构](#技术架构)** · **[本地运行](#本地运行)** · **[性能实测](#性能实测)**
 
-在线演示：<https://raw-image.li.qinxing.xyz>
+</div>
 
-> 当前版本 0.1.0。技术设计与取舍见 [`docs/00-architecture.md`](docs/00-architecture.md)，验收记录与实测数据见 [`docs/02-acceptance.md`](docs/02-acceptance.md)。
+![RAW Lab 工作台](docs/assets/rawlab-desktop.png)
 
-## 快速开始
+<p align="center"><sub>ColorChecker Classic 24 拟合 · 合成测试图 mean ΔE00 = 0.011</sub></p>
 
-需要 Node.js ≥ 18.19。
+## 为什么是 RAW Lab
 
-```bash
-git clone https://github.com/xiaoqinxing/raw-image-tools.git
-cd raw-image-tools
-npm ci
-npm run dev          # http://127.0.0.1:5173
-```
+大多数在线修图工具把 RAW 当成一张“更宽的 JPEG”：套滤镜、调曲线、导出，结束。
 
-常用命令：
+RAW Lab 反过来，把 **从 CFA 到 sRGB 的整条 ISP 管线摊开给你看**：
 
-```bash
-npm run build
-npm run typecheck
-npm test             # Vitest（单元 / 数值）
-npx playwright install chromium
-npm run test:e2e     # Playwright（自动启动 dev server）
-```
+- **从 RAW 开始，而不是从成片开始**：LibRaw WASM 解包 DNG，裸 RAW 支持 CFA、位宽、packing、端序、stride、active area 与逐通道黑白电平。
+- **每一步都可见、可调、可绕过**：10 个固定阶段，均可 bypass、A/B、查看中间结果、单独导出。
+- **像素不离开浏览器**：无上传、无账号、无服务端推理。关掉网络也能继续处理已加载的图像。
+- **工程级可复现**：参数、快照、预设、ROI、探针、ColorChecker 与视图状态都能保存，方便反复验证。
+- **性能不靠“云端显卡”**：WebGL2 管线、Worker 解码/分析、阶段缓存与降采样策略，让 24MP RAW 在普通桌面浏览器里保持可交互。
 
-浏览器要求：桌面 Chrome / Edge，WebGL2 + `EXT_color_buffer_float`。建议独立显卡或较新的集显；软件渲染可以运行，但全分辨率显示会明显变慢。
+适合相机/ISP 工程师、影像算法工程师、摄影技术爱好者，以及需要演示 RAW 处理流程的教学和评测场景。
 
-## 功能
+## 三步开始
 
-### 导入
+1. **导入**：拖入 DNG，或按实际存储格式配置裸 RAW。
+2. **拆解**：切换 10 个 ISP 阶段，做 A/B、差异图、闪烁对比或 2–4 图同步对比。
+3. **分析 / 导出**：看直方图、SNR、MTF、噪声频谱、ColorChecker ΔE00，导出任意阶段的 PNG。
 
-- **DNG**：LibRaw WASM 解包像素；自带 TIFF/DNG 标签解析器补齐 `ActiveArea`、`DefaultCrop`、`BlackLevel`、`WhiteLevel`、`ColorMatrix1/2`、`ForwardMatrix1/2`、`AsShotNeutral`、`CalibrationIlluminant`、`Orientation`、`CFA`、`BaselineExposure` 等元数据。
-- **裸 RAW 二进制**：显式配置宽高、CFA（RGGB/BGGR/GRBG/GBRG）、位宽（8/10/12/14/16）、packing、端序、对齐、header offset、row stride、active area、逐 CFA 黑/白电平。
-  - unpacked：u8 / u16，LE / BE，右对齐 / 左对齐 + sample shift。
-  - packed：连续 LSB-first / MSB-first，MIPI RAW10 / RAW12 / RAW14。
-  - 导入前实时显示每行字节、实际 stride、所需总字节与文件大小的差额。
-- 导入后给出逐通道 min/p1/p50/p99/max、低于黑电平 / 高于白电平比例、G1/G2 一致性、警告与修正建议。
-- CFA 伪彩预览；DNG 的 OpcodeList、LinearizationTable、BlackLevelDelta 等未执行项会明确提示。
+不用安装，直接打开 **[在线演示](https://raw-image.li.qinxing.xyz)**。
 
-### 固定管线
+## 核心功能
 
-顺序固定，全部阶段可 bypass、可调、可查看中间结果：
+### RAW 导入与诊断
+
+- **DNG**：LibRaw WASM 解包像素，配合本地 TIFF/DNG 标签解析补齐 `ActiveArea`、`DefaultCrop`、`BlackLevel`、`WhiteLevel`、`ColorMatrix1/2`、`ForwardMatrix1/2`、`AsShotNeutral`、`CalibrationIlluminant`、`Orientation`、`BaselineExposure` 等元数据。
+- **裸 RAW 二进制**：支持 RGGB / BGGR / GRBG / GBRG；8/10/12/14/16-bit；u8/u16、LE/BE、左/右对齐、sample shift；连续 packed 与 MIPI RAW10/12/14；header offset、row stride、active area、逐 CFA 黑白电平。
+- **导入即体检**：逐通道 min/p1/p50/p99/max、黑/白电平越界比例、G1/G2 一致性、字节差、警告与修正建议。
+- **CFA 伪彩预览**：快速确认 Bayer 相位与数据排布是否正确。
+- **未执行项透明提示**：OpcodeList、LinearizationTable、BlackLevelDelta 等 DNG 标签不会静默忽略。
+
+### 固定 10 阶段 ISP 管线
+
+顺序固定，保证不同图像、不同参数之间可比较、可复现。
 
 | # | 阶段 | 色彩域 | 实现 |
 |---|------|--------|------|
 | 1 | 黑/白电平 | raw CFA | GPU R16F |
-| 2 | 平场 | raw CFA | GPU，逐 CFA 增益，强度 / epsilon / max gain |
+| 2 | 平场 / 镜头暗影 | raw CFA | GPU 逐 CFA 增益，强度 / epsilon / max gain |
 | 3 | 白平衡 | raw CFA | As Shot、手动、灰点吸管 |
-| 4 | 去马赛克 | camera RGB | Fast：GPU MHC（5×5 Malvar-He-Cutler）或 Bilinear；Quality：Worker/CPU 净室 AHD 近似 |
+| 4 | 去马赛克 | camera RGB | Fast：GPU MHC（5×5 Malvar-He-Cutler）/ Bilinear；Quality：Worker/CPU 净室 AHD 近似 |
 | 5 | 降噪 | camera RGB | Guided（亮度/色度分离）或 Bilateral（可分离交叉双边近似），GPU 多 pass |
 | 6 | CCM | camera RGB | 手动 3×3、单位阵、ColorChecker 拟合 |
 | 7 | CSC | linear sRGB | DNG ForwardMatrix / ColorMatrix 推导，Bradford 适应，手动矩阵 |
@@ -61,45 +70,75 @@ npm run test:e2e     # Playwright（自动启动 dev server）
 | 9 | USM | display sRGB | 亮度通道高斯模糊 + 阈值 + 强度 |
 | 10 | 输出 | — | 裁剪、8/16-bit PNG、任意阶段导出、全分辨率 |
 
-- 中间阶段可单独查看、导出 PNG；阶段 A/B、快照 A/B、差异图、闪烁对比、可拖动分割线。
-- 剪切提示：高光 ≥1.0 标红、负值 ≤0 标蓝。
-- 阶段缓存：只重算参数变化影响的下游阶段；全分辨率只保留目标阶段，避免缓存爆炸。
-- 预览使用偶数因子降采样以保持 2×2 CFA 相位；24MP 预览约 1500×1000。
-- 全分辨率 ≤48MP 原生；>48MP 使用资源上限（约 12MP 纹理）降级，避免 OOM。
+配套能力：
 
-### 分析
+- 中间阶段查看、导出与 **A/B**；快照 A/B、差异图、闪烁对比、可拖动分割线。
+- 高光 ≥1.0 标红、负值 ≤0 标蓝的剪切提示。
+- 阶段缓存：只重算参数变化影响的下游阶段；全分辨率只保留目标阶段。
+- 预览按偶数因子降采样，保持 2×2 CFA 相位；24MP 预览约 1500×1000。
+- 全分辨率 ≤48MP 原生；>48MP 自动降级到资源上限（约 12MP 纹理），避免 OOM。
 
-- 直方图（RGB + 亮度，256/1024 bins，线性/对数，剪切计数）。
-- 像素探针（RAW CFA DN、阶段 RGB、WB 乘数）。
-- SNR（ROI 内逐通道 mean/std / dB，display 域自动逆 gamma）。
-- MTF（斜边检测、4× oversampling、Hann、FFT、MTF50/MTF10）。
-- ColorChecker Classic 24（pre-2014 D65）：手动四角、透视网格、色块采样、最小二乘 + ΔE00 优化、逐块 ΔE00/ΔC'、一键应用 CCM。
-- 波形（luma / RGB parade）。
-- 噪声频谱（2D FFT、log power、径向平均、H/V 1D PSD、去趋势、Hann）。
-- 差异指标（MAE / PSNR / max diff，A vs 当前阶段 bypass 或快照）。
+### ISP 分析与 ColorChecker
 
-### 工程与预设
+- **直方图**：RGB + 亮度，256/1024 bins，线性/对数，剪切计数。
+- **像素探针**：RAW CFA DN、各阶段 RGB、WB 乘数。
+- **SNR**：ROI 内逐通道 mean/std/dB，display 域自动逆 gamma。
+- **MTF**：斜边检测、4× oversampling、Hann、FFT、MTF50/MTF10。
+- **ColorChecker Classic 24**（pre-2014 D65）：手动四角、透视网格、色块采样、最小二乘 + ΔE00 优化、逐块 ΔE00/ΔC'、一键应用 CCM。
+- **波形**：luma / RGB parade。
+- **噪声频谱**：2D FFT、log power、径向平均、H/V 1D PSD、去趋势、Hann。
+- **差异指标**：MAE / PSNR / max diff，对比当前管线与阶段 bypass 或快照。
 
-- 工程 JSON：图像元数据、裸 RAW 配置、管线参数、快照、ColorChecker、ROI、探针、视图、布局；不嵌入 RAW 本体。
-- 打开工程后逐张重新关联 RAW；显示 SHA-256 校验结果；支持同时关联平场。
-- 自动保存到 IndexedDB（工程结构，不含 RAW）；可从工程菜单恢复。
-- 预设：只保存管线参数（不含平场 / 裁剪等文件相关字段），IndexedDB 持久化，支持导入 / 导出 / 删除。
-- 快照：同一图像多组参数，可应用或作为 A/B 参考。
-- 2–4 图对比：2H / 2V / 4 格布局、同步缩放/平移、各图独立参数、点击标题切换编辑对象、交换 A/B。
+### 工程、预设与多图对比
 
-### 界面适配
+- 工程 JSON：图像元数据、裸 RAW 配置、管线参数、快照、ColorChecker、ROI、探针、视图与布局；不嵌入 RAW 本体。
+- 打开工程后逐张重新关联 RAW，SHA-256 校验；支持同时关联平场。
+- 自动保存到 IndexedDB，可从工程菜单恢复。
+- 预设只保存管线参数，支持导入 / 导出 / 删除。
+- 快照保存同一 RAW 的多组参数，可应用或作为 A/B 参考。
+- **2–4 图对比**：2H / 2V / 4 格布局、同步缩放/平移、独立参数、点击标题切换编辑对象、交换 A/B。
 
-- ≥1200px 使用左图像栏、中央画布/分析、右 ISP 管线三栏布局；1200–1399px 自动收窄两侧栏。
-- <1200px 两侧栏改为抽屉，通过顶栏“图像 / 管线”按钮打开；画布占满可用宽度。
-- 手机端顶栏自动精简，分析面板可折叠；短屏横屏时默认折叠分析面板以保留画布空间。
-- 分析视图、导入/导出/重关联对话框在窄屏下自动改为纵向布局，并保证页面无横向溢出。
-- 触屏设备加大按钮与输入控件高度，画布禁用浏览器手势冲突；支持安全区 inset。
+### 响应式界面
 
-## 性能目标与实测
+- ≥1200px：左图像栏、中央画布/分析、右 ISP 管线三栏布局。
+- <1200px：两侧栏变成抽屉，画布占满宽度；顶栏「图像 / 管线」随取随用。
+- 手机端：分析面板可折叠，短屏横屏自动收起；工具栏可横向滑动。
+- 分析视图与对话框窄屏自动改为纵向布局，无横向溢出。
 
-目标：24MP Fast 全分辨率渲染 <1s（不含 PNG 编码与 Quality 去马赛克）、预览 <150ms、Quality <3s、冷启动 <10s、24MP <2GB、100MP 降级/分块不崩溃。
+<p align="center">
+  <img src="docs/assets/rawlab-mobile.png" width="300" alt="RAW Lab 手机界面">
+  <br>
+  <sub>同一套工程在手机上也能完成导入、分析、调参与导出。</sub>
+</p>
 
-本机无头 Chromium + SwiftShader（软件 GL）实测（详见 `docs/02-acceptance.md`）：
+## 技术架构
+
+```mermaid
+flowchart LR
+  A[DNG / Bare RAW] --> B[decode.worker<br/>LibRaw WASM + TIFF parser]
+  B --> C[render.worker<br/>WebGL2 ISP pipeline]
+  C --> D[Canvas preview]
+  C --> E[Analysis worker path<br/>histogram / SNR / MTF / FFT]
+  D --> F[React UI<br/>Zustand state]
+  E --> F
+  F --> G[PNG export]
+  F --> H[Project / Presets / IndexedDB]
+```
+
+- **React 18 + TypeScript + Vite**：桌面级工作台 UI，状态集中在 Zustand。
+- **WebGL2 + GLSL**：黑白电平、平场、WB、MHC 去马赛克、Guided/Bilateral 降噪、CCM、CSC、Gamma、USM 在 GPU 上执行。
+- **Web Worker**：DNG/裸 RAW 解码与 AHD、FFT 等 CPU 重任务离开主线程。
+- **LibRaw WASM**：在浏览器内解包 DNG，不依赖服务端。
+- **阶段缓存 + 双分辨率策略**：参数变化只重算下游；预览保持 CFA 相位，全分辨率按需渲染。
+- **纯静态部署**：`dist/` 可直接放到任意静态服务器，无数据库、无 API。
+
+更多实现细节与取舍见 [`docs/00-architecture.md`](docs/00-architecture.md)，验收与实测见 [`docs/02-acceptance.md`](docs/02-acceptance.md)。
+
+## 性能实测
+
+目标：24MP Fast 全分辨率 <1s（不含 PNG 编码与 Quality 去马赛克）、预览 <150ms、Quality <3s、冷启动 <10s、24MP <2GB、100MP 降级/分块不崩溃。
+
+本机无头 Chromium + SwiftShader（软件 GL）实测：
 
 | 场景 | 管线耗时 | 说明 |
 |------|----------|------|
@@ -111,80 +150,72 @@ npm run test:e2e     # Playwright（自动启动 dev server）
 
 软件渲染无法代表硬件 WebGL2 的显示性能；上表把“管线命令耗时”和“墙钟”分开记录，避免把 SwiftShader 的 present 成本误算到 ISP 管线。
 
-## 已知限制
+## 本地运行
 
-- AHD 是净室方向性近似实现（方向性绿通道 + 色差插值），不是 GPL 参考实现逐行移植；RCD 尚未实现。
-- DNG 的 OpcodeList、LinearizationTable、BlackLevelDeltaH/V 不执行，只提示；依赖这些标签的 DNG 可能出现黑/白电平或暗角偏差。
-- 16-bit PNG 不写 ICC profile；颜色按当前 display-sRGB 值量化。
-- >48MP 不做原生全分辨率渲染；导出为降采样结果，警告会显示在导出对话框与 toast。原生 100MP 分块渲染尚未实现。
-- 全分辨率 AHD 在低内存设备上可能触发浏览器限制；建议 24MP 以内使用，或保持 Fast 模式。
-- 4 格布局会同时渲染最多 4 个预览会话，显存/内存占用随图像数量线性增加；未激活图像只保留预览规模。
-- 工程打开使用文件选择器重新关联；尚未接入 File System Access API 的授权句柄持久化。
-- 测试用的合成 DNG/裸 RAW 位于 `tests/fixtures/test-*`，仅用于演示与 E2E，不代表真实相机校准数据。
-
-## 目录
-
-```
-src/core/          RAW 解码、色彩、管线参数、CPU 参考、分析
-src/gpu/           WebGL2 Renderer 与 shader
-src/workers/       decode.worker / render.worker
-src/services/      editor 编排、session、项目、benchmark
-src/state/         Zustand store
-src/ui/            暗色工作台 UI
-tests/unit/        Vitest 数值测试
-tests/e2e/         Playwright 端到端
-scripts/           bench-browser.mjs
-public/libraw/     LibRaw WASM 与许可证
-```
-
-## 测试与基准
+需要 Node.js ≥ 18.19。
 
 ```bash
-npm test
-npm run test:e2e
+git clone https://github.com/xiaoqinxing/raw-image-tools.git
+cd raw-image-tools
+npm ci
+npm run dev          # http://127.0.0.1:5173
+```
+
+浏览器要求：Chrome / Edge（桌面优先，移动端使用响应式布局），WebGL2 + `EXT_color_buffer_float`。建议独立显卡或较新的集显；软件渲染可以运行，但全分辨率显示会明显变慢。
+
+### 测试、基准与构建
+
+```bash
+npm run typecheck
+npm test             # Vitest：71 个单元/数值测试
+npx playwright install chromium
+npm run test:e2e     # Playwright：11 个 E2E
+npm run build
+```
+
+```bash
 npm run bench -- --width=6000 --height=4000 --algorithms=mhc
 npm run bench -- --width=6000 --height=4000 --algorithms=ahd
 npm run bench -- --width=10000 --height=10000 --algorithms=mhc
 ```
 
-`npm run test:e2e` 会自动启动 Vite dev server（`playwright.config.ts`），也可以手动指定已运行的地址：
+`npm run test:e2e` 会自动启动 Vite dev server。`npm run bench` 需要先启动 `npm run dev`。
 
-```bash
-PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 npm run test:e2e
-```
+### 持续集成与部署
 
-`npm run bench` 需要先启动 `npm run dev`。Playwright 在无系统 Chromium 的环境下可设置：
-
-```bash
-PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/path/to/chrome \
-LD_LIBRARY_PATH=/path/to/libasound \
-npm run test:e2e
-```
-
-`window.__rawlab` 仅在 DEV 暴露，用于 E2E 与基准；生产构建不包含。
-
-## 持续集成
-
-GitHub Actions 工作流 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) 在每次 push / PR 时执行：
-
-- Vitest 单元与数值测试；
-- 生产构建；
-- Playwright E2E（自动安装 Chromium，失败时上传 `test-results/`）。
-
-CI 使用 SwiftShader 软件 WebGL 运行浏览器测试，不依赖 GPU。
-
-## 部署
-
-项目是纯静态站点，`npm run build` 后的 `dist/` 可直接部署到任意静态服务器：
+GitHub Actions 在每次 push / PR 时执行 Vitest、生产构建与 Playwright E2E；CI 使用 SwiftShader 软件 WebGL，不依赖 GPU。工作流见 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)。
 
 ```bash
 npm run build
 rsync -az --delete dist/ user@host:/srv/rawlab/
 ```
 
-测试夹具位于 `tests/fixtures/`，不会进入 `public/` 和构建产物。若使用 Caddy，需确保 `.wasm` 返回 `application/wasm`，并给带哈希的 `assets/*` 设置长期缓存、`index.html` 设置 `no-cache`。
+测试夹具位于 `tests/fixtures/`，不会进入 `public/` 和构建产物。使用 Caddy 时需确保 `.wasm` 返回 `application/wasm`，`assets/*` 长期缓存，`index.html` 设置 `no-cache`。
+
+## 已知限制
+
+- AHD 是净室方向性近似实现，不是 GPL 参考实现逐行移植；RCD 尚未实现。
+- DNG 的 OpcodeList、LinearizationTable、BlackLevelDeltaH/V 不执行，只提示。
+- 16-bit PNG 不写 ICC profile；颜色按当前 display-sRGB 值量化。
+- >48MP 不做原生全分辨率渲染；原生 100MP 分块渲染尚未实现。
+- 全分辨率 AHD 在低内存设备上可能触发浏览器限制；建议 24MP 以内或使用 Fast 模式。
+- 4 格布局会同时渲染最多 4 个预览会话，显存/内存占用随图像数量增加。
+- 工程重开依赖文件选择器重新关联；尚未接入 File System Access API 的持久授权。
+- 测试用的合成 RAW 位于 `tests/fixtures/`，仅用于演示与 E2E，不代表真实相机校准数据。
+
+## Roadmap / 参与
+
+欢迎 Issue、PR 和使用反馈。接下来比较有价值的方向：
+
+- RCD / 更多去马赛克算法与相机矩阵预设；
+- 原生 100MP 分块渲染与导出；
+- ICC profile 与色彩管理；
+- File System Access API 工程重关联；
+- 更多 RAW 格式与相机样本的兼容性测试。
+
+如果 RAW Lab 对你有帮助，欢迎点一个 **Star**，或者把它分享给正在折腾 RAW / ISP 的朋友。
 
 ## 许可证
 
-项目代码：Apache-2.0，见 `LICENSE`。
-第三方组件与 LibRaw（LGPL-2.1 / CDDL-1.0）声明见 `THIRD_PARTY_NOTICES.md` 与 `NOTICE`。
+项目代码：Apache-2.0，见 [`LICENSE`](LICENSE)。  
+第三方组件与 LibRaw（LGPL-2.1 / CDDL-1.0）声明见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) 与 [`NOTICE`](NOTICE)。
