@@ -9,6 +9,7 @@ DNG / 裸 RAW → 黑白电平 → 平场 → 白平衡 → 去马赛克 → 降
 
 [![CI](https://github.com/xiaoqinxing/raw-image-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaoqinxing/raw-image-tools/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Deploy](https://img.shields.io/badge/deploy-GitHub%20Pages-222.svg)](https://github.com/xiaoqinxing/raw-image-tools/actions/workflows/pages.yml)
 [![WebGL2](https://img.shields.io/badge/WebGL2-GPU-5c3ee8.svg)](#技术架构)
 [![LibRaw WASM](https://img.shields.io/badge/LibRaw-WASM-orange.svg)](THIRD_PARTY_NOTICES.md)
 [![No Backend](https://img.shields.io/badge/backend-none-2ea44f.svg)](#为什么是-raw-lab)
