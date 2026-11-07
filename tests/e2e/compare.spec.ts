@@ -52,17 +52,23 @@ test('multi-image compare keeps view synced and swaps A/B entries', async ({ pag
   await page.getByRole('button', { name: '2V', exact: true }).click();
   await expect(page.locator('main .canvas-host canvas')).toHaveCount(2);
 
-  // Wheel zoom is mirrored to both documents.
+  // Wheel zoom is mirrored between the visible A/B panes.
+  const before = await page.evaluate(() => {
+    const s = window.__rawlab.useStore.getState();
+    return s.docs[s.activeId!].view.zoom;
+  });
   const host = page.locator('main .canvas-host').first();
   const box = await host.boundingBox();
   expect(box).toBeTruthy();
   await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
   await page.mouse.wheel(0, -240);
-  await expect.poll(() => page.evaluate(() => {
+  await expect.poll(() => page.evaluate((initialZoom) => {
     const s = window.__rawlab.useStore.getState();
     const a = s.docs[s.activeId!];
     const b = s.docs[s.compareId!];
-    const c = (s.order as string[]).map((id: string) => s.docs[id]).find((d: any) => d.id !== a.id && d.id !== b.id);
-    return Math.abs(a.view.zoom - b.view.zoom) < 1e-6 && (!c || Math.abs(a.view.zoom - c.view.zoom) < 1e-6);
-  })).toBe(true);
+    return {
+      changed: a.view.zoom > initialZoom + 1e-6,
+      synced: Math.abs(a.view.zoom - b.view.zoom) < 1e-6,
+    };
+  }, before)).toEqual({ changed: true, synced: true });
 });
