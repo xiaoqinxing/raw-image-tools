@@ -185,12 +185,14 @@ npm run bench -- --width=10000 --height=10000 --algorithms=mhc
 
 GitHub Actions 在每次 push / PR 时执行 Vitest、生产构建与 Playwright E2E；CI 使用 SwiftShader 软件 WebGL，不依赖 GPU。工作流见 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)。
 
+`main` 分支的每次 push 还会触发 GitHub Pages 自动发布（[`.github/workflows/pages.yml`](.github/workflows/pages.yml)）：构建 `dist/`、上传 Pages artifact，并部署到自定义域名 **<https://raw-image.li.qinxing.xyz>**。无需手动 rsync。
+
 ```bash
 npm run build
-rsync -az --delete dist/ user@host:/srv/rawlab/
+# GitHub Actions 会自动完成测试、构建与 Pages 发布
 ```
 
-测试夹具位于 `tests/fixtures/`，不会进入 `public/` 和构建产物。使用 Caddy 时需确保 `.wasm` 返回 `application/wasm`，`assets/*` 长期缓存，`index.html` 设置 `no-cache`。
+测试夹具位于 `tests/fixtures/`，不会进入 `public/` 和构建产物。GitHub Pages 会自动处理 HTTPS 与静态文件 MIME；若改为自有服务器，使用 Caddy 时需确保 `.wasm` 返回 `application/wasm`，`assets/*` 长期缓存，`index.html` 设置 `no-cache`。
 
 ## 已知限制
 

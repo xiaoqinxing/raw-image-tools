@@ -100,11 +100,12 @@ npm run build
 
 ## 部署
 
-- 构建产物：`dist/`。
-- 纯静态部署，目标环境需正确返回 `application/wasm`。
-- 带哈希的 `assets/*` 设置长缓存，`index.html` 设置 `no-cache`。
-- 部署前执行完整测试和生产构建。
-- 不要在仓库中提交服务器地址、SSH 密钥、Token 或 Caddy 私密配置。
+- 生产入口：<https://raw-image.li.qinxing.xyz>
+- `main` push 后由 `.github/workflows/pages.yml` 自动构建并发布到 GitHub Pages。
+- `public/CNAME` 固定自定义域名，不要删除。
+- Pages 构建产物为 `dist/`；必须确保 `dist/CNAME` 和 `dist/index.html` 存在。
+- 页面应用使用根路径部署，Vite `base` 保持 `/`。
+- 不要把服务器地址、SSH 密钥、Token 或 Caddy 私密配置提交到仓库。
 
 ## 可复用提示词
 
