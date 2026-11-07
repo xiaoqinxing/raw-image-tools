@@ -9,7 +9,8 @@ DNG / 裸 RAW → 黑白电平 → 平场 → 白平衡 → 去马赛克 → 降
 
 [![CI](https://github.com/xiaoqinxing/raw-image-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaoqinxing/raw-image-tools/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Deploy](https://img.shields.io/badge/deploy-GitHub%20Pages-222.svg)](https://github.com/xiaoqinxing/raw-image-tools/actions/workflows/pages.yml)
+[![Production](https://img.shields.io/badge/production-live-2ea44f.svg)](https://raw-image.li.qinxing.xyz)
+[![Deploy](https://img.shields.io/badge/deploy-GitHub%20Actions-222.svg)](https://github.com/xiaoqinxing/raw-image-tools/actions)
 [![WebGL2](https://img.shields.io/badge/WebGL2-GPU-5c3ee8.svg)](#技术架构)
 [![LibRaw WASM](https://img.shields.io/badge/LibRaw-WASM-orange.svg)](THIRD_PARTY_NOTICES.md)
 [![No Backend](https://img.shields.io/badge/backend-none-2ea44f.svg)](#为什么是-raw-lab)
@@ -186,14 +187,17 @@ npm run bench -- --width=10000 --height=10000 --algorithms=mhc
 
 GitHub Actions 在每次 push / PR 时执行 Vitest、生产构建与 Playwright E2E；CI 使用 SwiftShader 软件 WebGL，不依赖 GPU。工作流见 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)。
 
-`main` 分支的每次 push 还会触发 GitHub Pages 自动发布（[`.github/workflows/pages.yml`](.github/workflows/pages.yml)）：构建 `dist/`、上传 Pages artifact，并部署到自定义域名 **<https://raw-image.li.qinxing.xyz>**。无需手动 rsync。
+`main` 分支的每次 push 会触发两条自动发布链路：
+
+1. **生产站点**：`.github/workflows/deploy.yml` 构建 `dist/`，通过 **SSH 密钥认证**（不是密码）rsync 到 `root@qinxing.xyz:/srv/raw-image.li.qinxing.xyz/`，更新 **<https://raw-image.li.qinxing.xyz>**。Caddy 继续负责 HTTPS、WASM MIME 与缓存头。
+2. **GitHub Pages 镜像**：`.github/workflows/pages.yml` 以 `/raw-image-tools/` 为 base 构建，发布到 <https://xiaoqinxing.github.io/raw-image-tools/>。
 
 ```bash
 npm run build
-# GitHub Actions 会自动完成测试、构建与 Pages 发布
+# push 到 main 后，GitHub Actions 自动测试、构建并更新生产站点与 Pages 镜像
 ```
 
-测试夹具位于 `tests/fixtures/`，不会进入 `public/` 和构建产物。GitHub Pages 会自动处理 HTTPS 与静态文件 MIME；若改为自有服务器，使用 Caddy 时需确保 `.wasm` 返回 `application/wasm`，`assets/*` 长期缓存，`index.html` 设置 `no-cache`。
+生产服务器只需配置一次 SSH 公钥；工作流通过仓库 Secrets 中的 `SSH_PRIVATE_KEY` 和 `SSH_KNOWN_HOSTS` 连接，`BatchMode=yes` 禁止密码交互。测试夹具位于 `tests/fixtures/`，不会进入 `public/` 和构建产物。
 
 ## 已知限制
 

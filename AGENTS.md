@@ -100,12 +100,11 @@ npm run build
 
 ## 部署
 
-- 生产入口：<https://raw-image.li.qinxing.xyz>
-- `main` push 后由 `.github/workflows/pages.yml` 自动构建并发布到 GitHub Pages。
-- `public/CNAME` 固定自定义域名，不要删除。
-- Pages 构建产物为 `dist/`；必须确保 `dist/CNAME` 和 `dist/index.html` 存在。
-- 页面应用使用根路径部署，Vite `base` 保持 `/`。
-- 不要把服务器地址、SSH 密钥、Token 或 Caddy 私密配置提交到仓库。
+- 生产入口：<https://raw-image.li.qinxing.xyz>，由 `root@qinxing.xyz` 上的 Caddy 提供服务。
+- `main` push 后由 `.github/workflows/deploy.yml` 构建并通过 SSH 密钥 rsync 到 `/srv/raw-image.li.qinxing.xyz`；禁止使用密码登录。
+- `.github/workflows/pages.yml` 同时发布 GitHub Pages 镜像：<https://xiaoqinxing.github.io/raw-image-tools/>，构建时设置 `PAGES_BASE=/raw-image-tools/`。
+- 生产构建使用根路径 base；不要提交 `public/CNAME` 或把自定义域名指向 GitHub Pages。
+- 不要把 SSH 私钥、Token 或 Caddy 私密配置提交到仓库；工作流只从 GitHub Secrets 读取。
 
 ## 可复用提示词
 
