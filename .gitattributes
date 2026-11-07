@@ -1,0 +1,9 @@
+* text=auto eol=lf
+
+*.dng binary
+*.raw binary
+*.wasm binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
