@@ -11,6 +11,7 @@ import { computeDiff } from '../core/analysis/diff';
 import { fitColorChecker } from '../core/colorchecker/fit';
 import { effectiveCsc, paramsHash, STAGE_DOMAIN } from '../core/pipeline/params';
 import { rawSampleAt } from '../core/pipeline/cpu';
+import { displayRgb, toRgb8 } from '../core/color/display';
 import type { RenderWorkerEvent, RenderWorkerRequest, ViewStateMessage } from './protocol';
 
 let renderer: Renderer | null = null;
@@ -139,7 +140,7 @@ self.onmessage = async (event: MessageEvent<RenderWorkerRequest>) => {
     }
     if (msg.type === 'pickGray') {
       if (!raw) throw new Error('没有 RAW');
-      const r = renderer.renderPreview(msg.params, 'flat');
+      const r = renderer.renderPreview(msg.params, 'flat', { display: false });
       const pixels = renderer.readStage('preview', r.result.stage);
       const sx = pixels.width / raw.geometry.active.w;
       const sy = pixels.height / raw.geometry.active.h;
@@ -167,11 +168,45 @@ self.onmessage = async (event: MessageEvent<RenderWorkerRequest>) => {
       post({ type: 'grayPicked', requestId: msg.requestId, multipliers: mult, means, stage: r.result.stage });
       return;
     }
+    if (msg.type === 'probePixel') {
+      if (!raw) throw new Error('没有 RAW');
+      const sampled = renderer.sampleDisplayed(msg.x, msg.y);
+      const { active } = raw.geometry;
+      const ax = Math.max(0, Math.min(active.w - 1, Math.round(msg.x)));
+      const ay = Math.max(0, Math.min(active.h - 1, Math.round(msg.y)));
+      const rs = rawSampleAt(raw, ax, ay);
+      const channel = raw.cfa.sites[(ay & 1) * 2 + (ax & 1)];
+      const wbGain = msg.params.wb.bypass ? 1 : msg.params.wb.multipliers[rs.channel] ?? 1;
+      const sample = sampled ? {
+        x: ax,
+        y: ay,
+        raw: {
+          channel,
+          dn: rs.dn,
+          normalized: rs.normalized,
+          black: raw.levels.black[rs.channel] ?? 0,
+          white: raw.levels.white[rs.channel] ?? 1,
+        },
+        wb: {
+          multipliers: msg.params.wb.multipliers,
+          corrected: rs.normalized * wbGain,
+        },
+        stage: {
+          id: sampled.stage,
+          domain: sampled.domain,
+          rgb: sampled.rgb,
+          display: displayRgb(sampled.domain, sampled.rgb),
+          rgb8: toRgb8(displayRgb(sampled.domain, sampled.rgb)),
+        },
+      } : null;
+      post({ type: 'probePixel', requestId: msg.requestId, sample });
+      return;
+    }
     if (msg.type === 'analyze') {
       if (!raw) throw new Error('没有 RAW');
       const started = performance.now();
       const target = msg.stage;
-      const r = renderer.renderPreview(msg.params, target);
+      const r = renderer.renderPreview(msg.params, target, { display: false });
       const stage = r.result.stage;
       const domain = r.result.domain;
       const pixels = renderer.readStage('preview', stage);
@@ -246,23 +281,6 @@ self.onmessage = async (event: MessageEvent<RenderWorkerRequest>) => {
           channel: (msg.options?.channel === 0 || msg.options?.channel === 1 || msg.options?.channel === 2 || msg.options?.channel === 3 ? msg.options.channel : 3) as 0 | 1 | 2 | 3,
         });
         result = { ...n, ...metaFor([], roi) } as AnalysisResult;
-      } else if (msg.kind === 'probe') {
-        const pts = Array.isArray(msg.options?.points) ? msg.options.points as Array<{ id: string; x: number; y: number }> : [];
-        const points = pts.map((pt) => {
-          const px = Math.max(0, Math.min(pixels.width - 1, Math.round(pt.x * sx)));
-          const py = Math.max(0, Math.min(pixels.height - 1, Math.round(pt.y * sy)));
-          const i = (py * pixels.width + px) * 4;
-          const rs = rawSampleAt(raw!, pt.x, pt.y);
-          return {
-            id: pt.id,
-            x: pt.x,
-            y: pt.y,
-            rawCfa: { channel: raw!.cfa.sites[(pt.y & 1) * 2 + (pt.x & 1)], dn: rs.dn, normalized: rs.normalized },
-            stageRgb: [pixels.data[i], pixels.data[i + 1], pixels.data[i + 2]] as [number, number, number],
-            wbMultipliers: msg.params.wb.multipliers,
-          };
-        });
-        result = { kind: 'probe', points, ...metaFor([], msg.roi ?? null) } as AnalysisResult;
       } else if (msg.kind === 'diff') {
         const paramsB = msg.options?.paramsB as PipelineParams | undefined;
         if (!paramsB) throw new Error('差异分析缺少 B 参数');
@@ -284,7 +302,6 @@ self.onmessage = async (event: MessageEvent<RenderWorkerRequest>) => {
         diff.a = { imageId: raw!.id, stage };
         diff.b = { imageId: raw!.id, stage: bR.result.stage };
         result = { ...diff, ...metaFor([], msg.roi ?? null) } as AnalysisResult;
-        renderer.present({ ...lastView, source: 'preview', mode: 0 });
       } else if (msg.kind === 'colorchecker') {
         const cornersNorm = msg.options?.corners as Array<{ x: number; y: number }> | undefined;
         if (!cornersNorm || cornersNorm.length !== 4) throw new Error('ColorChecker 需要四个角点');

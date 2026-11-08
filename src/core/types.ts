@@ -37,7 +37,6 @@ export type Domain = 'raw-cfa' | 'camera-rgb' | 'linear-srgb' | 'display-srgb';
 
 export type AnalysisKind =
   | 'histogram'
-  | 'probe'
   | 'snr'
   | 'mtf'
   | 'colorchecker'
@@ -267,6 +266,30 @@ export interface ProbePoint {
   label?: string;
 }
 
+/** Live hover sample for the canvas readout (not persisted). */
+export interface ProbeSample {
+  x: number;
+  y: number;
+  raw: {
+    channel: ChannelId;
+    dn: number;
+    normalized: number;
+    black: number;
+    white: number;
+  };
+  wb: {
+    multipliers: Vec4;
+    corrected: number;
+  };
+  stage: {
+    id: StageId;
+    domain: Domain;
+    rgb: [number, number, number];
+    display: [number, number, number];
+    rgb8: [number, number, number];
+  };
+}
+
 export interface ColorCheckerSession {
   corners: [Point, Point, Point, Point] | null;
   referenceId: string;
@@ -378,18 +401,6 @@ export interface HistogramResult extends AnalysisMeta {
   scale: 'linear' | 'log';
 }
 
-export interface ProbeResult extends AnalysisMeta {
-  kind: 'probe';
-  points: Array<{
-    id: string;
-    x: number;
-    y: number;
-    rawCfa: { channel: ChannelId; dn: number; normalized: number };
-    stageRgb: [number, number, number];
-    wbMultipliers: Vec4;
-  }>;
-}
-
 export interface SnrResult extends AnalysisMeta {
   kind: 'snr';
   perChannel: Array<{
@@ -471,7 +482,6 @@ export interface DiffResult extends AnalysisMeta {
 
 export type AnalysisResult =
   | HistogramResult
-  | ProbeResult
   | SnrResult
   | MtfResult
   | ColorCheckerResult

@@ -260,7 +260,6 @@ export function PipelinePanel({ onClose }: { onClose?: () => void }) {
     <div className="flex h-9 shrink-0 items-center justify-between border-b border-ink-700/70 px-3">
       <span className="text-[11px] font-medium tracking-wide text-ink-200">ISP 管线</span>
       <div className="flex items-center gap-1">
-        <Button className="btn-xs" onClick={() => setTool('probe')} title="像素探针" disabled={!doc}>探针</Button>
         <Button className="btn-xs" onClick={() => setShowImport(true)}>导入</Button>
         {onClose ? <button className="drawer-close" onClick={onClose} aria-label="关闭管线面板">✕</button> : null}
       </div>

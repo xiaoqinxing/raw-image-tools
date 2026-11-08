@@ -1,20 +1,22 @@
 import React from 'react';
 import { useActiveDoc, useStore } from '../state/store';
 import { analyze, applyFittedCcm, fitColorChecker, renderActive } from '../services/editor';
-import type { AnalysisKind, AnalysisResult, ColorCheckerResult, HistogramResult, MtfResult, NoiseSpectrumResult, ProbeResult, SnrResult, WaveformResult } from '../core/types';
-import { Button, KV, Segmented } from './controls';
+import type { AnalysisKind, AnalysisResult, ColorCheckerResult, HistogramResult, MtfResult, NoiseSpectrumResult, SnrResult, WaveformResult } from '../core/types';
+import { Button, Segmented } from './controls';
 import { paramsHash } from '../core/pipeline/params';
 
 const TABS: Array<{ id: AnalysisKind | 'diff'; label: string }> = [
   { id: 'histogram', label: '直方图' },
   { id: 'waveform', label: '波形' },
-  { id: 'probe', label: '探针' },
   { id: 'snr', label: 'SNR' },
   { id: 'mtf', label: 'MTF' },
   { id: 'colorchecker', label: 'ColorChecker' },
   { id: 'noise', label: '噪声频谱' },
   { id: 'diff', label: '差异' },
 ];
+
+/** Tabs that are cheap enough to refresh automatically while the dock is open. */
+const AUTO_TABS = new Set<AnalysisKind>(['histogram', 'waveform']);
 
 function useAnalysis<T extends AnalysisResult>(kind: AnalysisKind): T | null {
   const doc = useActiveDoc();
@@ -103,37 +105,6 @@ function WaveformView({ result }: { result: WaveformResult }) {
     ctx.putImageData(img, 0, 0);
   }, [result]);
   return <canvas ref={ref} className="waveform-canvas h-full max-h-[170px] w-full rounded border border-ink-700 object-contain" style={{ imageRendering: 'pixelated' }} />;
-}
-
-function ProbeView({ result }: { result: ProbeResult }) {
-  const doc = useActiveDoc();
-  return (
-    <div className="h-full overflow-auto scroll-thin">
-      <table className="w-full text-[11px]">
-        <thead className="text-ink-500">
-          <tr className="text-left"><th className="py-1">探针</th><th>坐标</th><th>RAW</th><th>R</th><th>G</th><th>B</th><th>WB</th></tr>
-        </thead>
-        <tbody className="mono">
-          {result.points.map((p, i) => (
-            <tr key={p.id} className="border-t border-ink-700/60">
-              <td className="py-1 text-[#ffb85c]">P{i + 1}</td>
-              <td>{Math.round(p.x)},{Math.round(p.y)}</td>
-              <td>{p.rawCfa.channel}={p.rawCfa.dn}</td>
-              <td>{p.stageRgb[0].toFixed(4)}</td>
-              <td>{p.stageRgb[1].toFixed(4)}</td>
-              <td>{p.stageRgb[2].toFixed(4)}</td>
-              <td>{p.wbMultipliers.map((v) => v.toFixed(2)).join('/')}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="mt-2 flex gap-2">
-        <Button className="btn-xs" onClick={() => useStore.getState().setTool('probe')}>添加探针</Button>
-        {doc?.probes.length ? <Button className="btn-xs" onClick={() => { doc.probes.forEach((p) => useStore.getState().removeProbe(doc.id, p.id)); }}>清空</Button> : null}
-      </div>
-      <div className="mt-2 text-[11px] text-ink-500">探针值来自当前预览 stage 的 F16 纹理；RAW 值来自原始 U16 缓冲。</div>
-    </div>
-  );
 }
 
 function SnrView({ result }: { result: SnrResult }) {
@@ -343,6 +314,7 @@ export function AnalysisDock() {
   const setAnalysisStage = useStore((s) => s.setAnalysisStage);
   const setRoiKind = useStore((s) => s.setRoiKind);
   const setTool = useStore((s) => s.setTool);
+  const analysisBusy = useStore((s) => s.analysisBusy);
 
   React.useEffect(() => {
     const mq = window.matchMedia('(max-height: 520px) and (max-width: 1199px)');
@@ -350,6 +322,24 @@ export function AnalysisDock() {
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);
   }, []);
+
+  // Statistics are refreshed when the dock is opened, when the active tab
+  // changes, or when the document/stage changes. Parameter edits only mark the
+  // result stale; they do not queue a Worker readback on every frame.
+  const autoKey = doc ? paramsHash(doc.params) : '';
+  React.useEffect(() => {
+    if (collapsed || !doc || doc.status !== 'ready') return;
+    if (!AUTO_TABS.has(tab)) return;
+    const current = doc.analysis[tab];
+    if (current && current.paramsHash === autoKey && current.stage === analysisStage) return;
+    const id = doc.id;
+    const t = window.setTimeout(() => {
+      const latest = useStore.getState().docs[id];
+      if (!latest || latest.status !== 'ready') return;
+      void analyze(tab, tab === 'histogram' ? { bins: 1024 } : undefined);
+    }, 350);
+    return () => window.clearTimeout(t);
+  }, [collapsed, doc?.id, doc?.status, tab, analysisStage]);
 
   if (!doc) return null;
 
@@ -361,7 +351,6 @@ export function AnalysisDock() {
     setCollapsed(false);
     if (tab === 'colorchecker') fitColorChecker();
     else if (tab === 'diff') analyze('diff');
-    else if (tab === 'probe') analyze('probe');
     else {
       setRoiKind(tab);
       if (tab === 'snr' || tab === 'mtf' || tab === 'noise') {
@@ -389,6 +378,7 @@ export function AnalysisDock() {
             <option value="sharpen">最终</option>
           </select>
           {stale ? <span className="badge badge-warn analysis-stale" title="参数已变化，结果可能过期">参数已变化</span> : null}
+          {analysisBusy ? <span className="flex items-center gap-1 text-[11px] text-ink-400" data-testid="analysis-busy"><span className="spin" />计算中</span> : null}
           <Button className="btn-xs" variant="primary" onClick={run} testId="analysis-run">{tab === 'colorchecker' ? '拟合' : tab === 'diff' ? '差异' : result ? '重算' : '运行'}</Button>
         </div>
         <button
@@ -405,7 +395,6 @@ export function AnalysisDock() {
         <div className="analysis-content min-h-0 flex-1 overflow-auto p-3 scroll-thin">
           {tab === 'histogram' ? (result?.kind === 'histogram' ? <HistogramView result={result} /> : <Empty text="运行直方图：RGB + 亮度、线性/对数、剪切计数。" />) : null}
           {tab === 'waveform' ? (result?.kind === 'waveform' ? <WaveformView result={result} /> : <Empty text="运行波形：亮度波形 / RGB parade。" />) : null}
-          {tab === 'probe' ? (result?.kind === 'probe' ? <ProbeView result={result} /> : <Empty text="点击“添加探针”后在画布上取点；显示 RAW CFA、各阶段 RGB、WB 乘数。" />) : null}
           {tab === 'snr' ? (result?.kind === 'snr' ? <SnrView result={result} /> : <Empty text="在平坦区域框选 ROI，逐通道计算 mean/std 与 SNR dB。" />) : null}
           {tab === 'mtf' ? (result?.kind === 'mtf' ? <MtfView result={result} /> : <Empty text="框选斜边 ROI，计算 ISO 12233 MTF50/MTF10。" />) : null}
           {tab === 'colorchecker' ? (result?.kind === 'colorchecker' ? <ColorCheckerView result={result} /> : <Empty text="在画布上依次点选色卡四角（TL/TR/BR/BL），然后拟合 CCM。" />) : null}

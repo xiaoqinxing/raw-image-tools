@@ -17,7 +17,7 @@ import type {
   Domain,
 } from '../core/types';
 
-export type ToolMode = 'pan' | 'probe' | 'roi' | 'colorchecker' | 'crop' | 'gray';
+export type ToolMode = 'pan' | 'roi' | 'colorchecker' | 'crop' | 'gray';
 
 export interface ImageDoc {
   id: string;
@@ -65,6 +65,9 @@ interface State {
   showClipping: boolean;
   busy: boolean;
   busyLabel: string;
+  busyOverlay: boolean;
+  /** Non-blocking analysis work; never dims the canvas. */
+  analysisBusy: boolean;
   toast: string | null;
   projectName: string;
   dirty: boolean;
@@ -95,8 +98,6 @@ interface State {
   setColorChecker: (id: string, cc: ColorCheckerSession) => void;
   setAnalysis: (id: string, result: AnalysisResult) => void;
   clearAnalysis: (id: string, kind?: AnalysisKind) => void;
-  addProbe: (id: string, probe: ProbePoint) => void;
-  removeProbe: (id: string, probeId: string) => void;
   setRoi: (id: string, kind: AnalysisKind, roi: Rect | null) => void;
   setView: (id: string, view: Partial<ImageDoc['view']>) => void;
   setViewport: (viewport: Viewport) => void;
@@ -104,7 +105,8 @@ interface State {
   setAnalysisStage: (stage: StageId) => void;
   setSource: (id: string, source: 'preview' | 'full') => void;
   setStats: (id: string, stats: RenderStats | null) => void;
-  setBusy: (busy: boolean, label?: string) => void;
+  setBusy: (busy: boolean, label?: string, overlay?: boolean) => void;
+  setAnalysisBusy: (busy: boolean) => void;
   setToast: (toast: string | null) => void;
   setProjectName: (name: string) => void;
   setDirty: (dirty: boolean) => void;
@@ -138,10 +140,12 @@ const initialState = {
   tool: 'pan' as ToolMode,
   roiKind: 'snr' as AnalysisKind,
   viewport: { width: 1, height: 1, dpr: 1 },
-  falseColor: false,
+  falseColor: true,
   showClipping: false,
   busy: false,
   busyLabel: '',
+  busyOverlay: false,
+  analysisBusy: false,
   toast: null as string | null,
   projectName: '未命名工程',
   dirty: false,
@@ -224,8 +228,6 @@ export const useStore = create<State>((set, get) => ({
       delete analysis[kind];
       return { docs: { ...s.docs, [id]: { ...doc, analysis } } };
     }),
-  addProbe: (id, probe) => set((s) => (s.docs[id] ? { docs: { ...s.docs, [id]: { ...s.docs[id], probes: [...s.docs[id].probes, probe] } } } : s)),
-  removeProbe: (id, probeId) => set((s) => (s.docs[id] ? { docs: { ...s.docs, [id]: { ...s.docs[id], probes: s.docs[id].probes.filter((p) => p.id !== probeId) } } } : s)),
   setRoi: (id, kind, roi) =>
     set((s) => {
       const doc = s.docs[id];
@@ -241,7 +243,8 @@ export const useStore = create<State>((set, get) => ({
   setAnalysisStage: (analysisStage) => set({ analysisStage }),
   setSource: (id, source) => set((s) => (s.docs[id] ? { docs: { ...s.docs, [id]: { ...s.docs[id], source } } } : s)),
   setStats: (id, stats) => set((s) => (s.docs[id] ? { docs: { ...s.docs, [id]: { ...s.docs[id], stats } } } : s)),
-  setBusy: (busy, label = '') => set({ busy, busyLabel: label }),
+  setBusy: (busy, label = '', overlay = true) => set({ busy, busyLabel: label, busyOverlay: busy && overlay }),
+  setAnalysisBusy: (analysisBusy) => set({ analysisBusy }),
   setToast: (toast) => set({ toast }),
   setProjectName: (projectName) => set({ projectName }),
   setDirty: (dirty) => set({ dirty }),

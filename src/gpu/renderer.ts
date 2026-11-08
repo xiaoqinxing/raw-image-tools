@@ -155,6 +155,7 @@ export class Renderer {
   private lastPreview: StageResult | null = null;
   private lastPreviewB: StageResult | null = null;
   private lastFull: StageResult | null = null;
+  private lastShown: StageResult | null = null;
   private fullFactor = 1;
   private previewFactor = 1;
   private maxTextureSize: number;
@@ -220,6 +221,7 @@ export class Renderer {
     this.lastPreview = null;
     this.lastPreviewB = null;
     this.lastFull = null;
+    this.lastShown = null;
   }
 
   private scaleFlat(flat: FlatField, factor: number): FlatField {
@@ -285,6 +287,7 @@ export class Renderer {
 
   private disposeTex(t: RenderTexture | undefined | null): void {
     if (!t) return;
+    if (this.lastShown?.texture === t) this.lastShown = null;
     this.gl.deleteFramebuffer(t.fbo);
     this.gl.deleteTexture(t.texture);
   }
@@ -419,7 +422,7 @@ export class Renderer {
     cache.keys[stage] = this.stageKey(params, stage, width, height, preview);
   }
 
-  private runQualityDemosaic(preview: boolean, params: PipelineParams): void {
+  private runQualityDemosaic(preview: boolean, params: PipelineParams, display = true): void {
     if (!this.raw) throw new Error('没有 RAW');
     const raw = preview ? this.previewRaw : this.fullRaw;
     const tex = preview ? this.rawPreviewTex : this.rawFullTex;
@@ -429,7 +432,9 @@ export class Renderer {
     if (cache.stages.demosaic && cache.keys.demosaic === wantKey) return;
     // Render through WB first; the cache is then populated for levels/WB.
     const wb = this.renderChain(params, 'wb', raw, tex, preview ? this.previewFlat : this.fullFlat, preview ? this.flatPreviewTex : this.flatFullTex, cache, preview);
-    if (preview) this.lastPreview = wb.result; else this.lastFull = wb.result;
+    if (display) {
+      if (preview) this.lastPreview = wb.result; else this.lastFull = wb.result;
+    }
     const pixels = this.readTextureRed(wb.result.texture);
     const rgb = demosaicAHD({ width: pixels.width, height: pixels.height, data: pixels.data, cfa: raw.cfa });
     this.injectStage(preview, params, 'demosaic', pixels.width, pixels.height, rgb.data);
@@ -788,15 +793,16 @@ export class Renderer {
     return out;
   }
 
-  renderPreview(params: PipelineParams, target: StageId): { result: StageResult; timings: RenderTimings } {
+  renderPreview(params: PipelineParams, target: StageId, options: { display?: boolean } = {}): { result: StageResult; timings: RenderTimings } {
     if (!this.raw || !this.previewRaw || !this.rawPreviewTex) throw new Error('没有 RAW');
+    const display = options.display !== false;
     let qualityMs = 0;
     const qualityNeeded = !params.demosaic.bypass &&
       STAGE_ORDER.indexOf(target) >= STAGE_ORDER.indexOf('demosaic') &&
       (params.demosaic.algorithm === 'ahd' || params.demosaic.algorithm === 'rcd');
     if (qualityNeeded) {
       const t0 = performance.now();
-      this.runQualityDemosaic(true, params);
+      this.runQualityDemosaic(true, params, display);
       qualityMs = performance.now() - t0;
     }
     const r = this.renderChain(params, target, this.previewRaw, this.rawPreviewTex, this.previewFlat, this.flatPreviewTex, this.previewCache, true);
@@ -804,7 +810,7 @@ export class Renderer {
       r.timings.stages.demosaic = (r.timings.stages.demosaic ?? 0) + qualityMs;
       r.timings.totalMs += qualityMs;
     }
-    this.lastPreview = r.result;
+    if (display) this.lastPreview = r.result;
     return r;
   }
 
@@ -859,6 +865,7 @@ export class Renderer {
     gl.clearColor(0.04, 0.05, 0.06, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     if (!result) return;
+    this.lastShown = result;
     const p = this.use('display', DISPLAY_FRAG);
     const bResult = view.mode !== 0 && this.lastPreviewB ? this.lastPreviewB : result;
     this.bindTex(p, 'uA', result.texture.texture, 0);
@@ -938,6 +945,25 @@ export class Renderer {
     const result = source === 'preview' ? this.lastPreview : this.lastFull;
     if (!result) throw new Error('stage 尚未渲染');
     return this.readTexture(result.texture, rect);
+  }
+
+  /** Read the pixel currently shown on the canvas at an image-space position. */
+  sampleDisplayed(x: number, y: number): { rgb: [number, number, number]; stage: StageId; domain: Domain; width: number; height: number } | null {
+    const result = this.lastShown;
+    const raw = this.raw;
+    if (!result || !raw) return null;
+    const imgW = raw.geometry.active.w;
+    const imgH = raw.geometry.active.h;
+    const px = Math.max(0, Math.min(result.width - 1, Math.round((x / Math.max(1, imgW)) * result.width)));
+    const py = Math.max(0, Math.min(result.height - 1, Math.round((y / Math.max(1, imgH)) * result.height)));
+    const read = this.readTexture(result.texture, { x: px, y: py, w: 1, h: 1 });
+    return {
+      rgb: [read.data[0], read.data[1], read.data[2]],
+      stage: result.stage,
+      domain: result.domain,
+      width: result.width,
+      height: result.height,
+    };
   }
 
   readPreviewB(stage: StageId, rect?: { x: number; y: number; w: number; h: number }): ReadPixels {

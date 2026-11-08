@@ -10,8 +10,7 @@ import { ExportDialog } from './ui/ExportDialog';
 import { ChangelogDialog } from './ui/ChangelogDialog';
 import { RelinkDialog } from './ui/ProjectMenu';
 import { useActiveDoc, useStore } from './state/store';
-import { analyze, autosaveProject, fitView, loadPresets, renderActive, setStageBypassAndRender } from './services/editor';
-import { paramsHash } from './core/pipeline/params';
+import { autosaveProject, fitView, loadPresets, renderActive, setStageBypassAndRender } from './services/editor';
 import { BUILD_INFO } from './build-info';
 
 function StatusBar() {
@@ -66,7 +65,7 @@ export default function App() {
   const showImport = useStore((s) => s.showImport);
   const showExport = useStore((s) => s.showExport);
   const setToast = useStore((s) => s.setToast);
-  const busy = useStore((s) => s.busy);
+  const busyOverlay = useStore((s) => s.busyOverlay);
   const [leftOpen, setLeftOpen] = React.useState(false);
   const [pipelineOpen, setPipelineOpen] = React.useState(false);
 
@@ -108,21 +107,6 @@ export default function App() {
   }, [order, docs, projectName]);
 
   React.useEffect(() => {
-    if (!doc || doc.status !== 'ready' || !doc.stats) return;
-    const current = doc.analysis.histogram;
-    if (current?.kind === 'histogram' && current.paramsHash === paramsHash(doc.params)) return;
-    const id = doc.id;
-    // Debounce re-renders during decode/resize. If the timer is cancelled by a
-    // newer generation, the next effect run schedules it again.
-    const t = window.setTimeout(() => {
-      const latest = useStore.getState().docs[id];
-      if (!latest || latest.status !== 'ready') return;
-      void analyze('histogram', { bins: 1024 });
-    }, 350);
-    return () => window.clearTimeout(t);
-  }, [doc?.id, doc?.generation, doc?.stats?.timings.totalMs, doc?.analysis.histogram]);
-
-  React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target as HTMLElement)?.isContentEditable) return;
@@ -138,7 +122,6 @@ export default function App() {
         const current = (doc.params[selectedStage] as { bypass?: boolean }).bypass ?? false;
         setStageBypassAndRender(selectedStage, !current);
       }
-      if (e.key === 'p' || e.key === 'P') useStore.getState().setTool('probe');
       if (e.key === 'a' || e.key === 'A') {
         useStore.getState().setAbMode(useStore.getState().abMode === 'stage' ? 'off' : 'stage');
         window.setTimeout(renderActive, 0);
@@ -180,7 +163,7 @@ export default function App() {
           {toast}
         </div>
       ) : null}
-      {busy ? <div className="pointer-events-none fixed inset-0 z-40 bg-black/5" /> : null}
+      {busyOverlay ? <div className="pointer-events-none fixed inset-0 z-40 bg-black/5" /> : null}
     </div>
   );
 }

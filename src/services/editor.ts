@@ -6,6 +6,7 @@ import type {
   PipelineSnapshot,
   Point,
   Preset,
+  ProbeSample,
   ProjectFile,
   ProjectImage,
   FlatFileRef,
@@ -13,7 +14,7 @@ import type {
   Rect,
   StageId,
 } from '../core/types';
-import { createDefaultParams, bypassStage, toPresetParams, fromPresetParams, STAGE_DOMAIN } from '../core/pipeline/params';
+import { createDefaultParams, bypassStage, toPresetParams, fromPresetParams, paramsHash } from '../core/pipeline/params';
 import { getReference } from '../core/color/colorchecker-data';
 import { decodeService, DecodeError } from './decode';
 import { ImageSession, stripFlat, stripRaw } from './session';
@@ -21,6 +22,12 @@ import { useStore, type ImageDoc, type Viewport } from '../state/store';
 import { idbGet, idbGetAll, idbPut, idbDelete } from '../lib/idb';
 
 const sessions = new Map<string, ImageSession>();
+/** Last posted preview request per document; identical requests are coalesced. */
+const lastRenderSig = new Map<string, string>();
+
+function clearRenderSig(id: string): void {
+  lastRenderSig.delete(id);
+}
 
 function toast(message: string) {
   useStore.getState().setToast(message);
@@ -102,6 +109,7 @@ async function createSessionForRaw(raw: RawImage, flat: FlatField | null): Promi
   });
   sessions.set(raw.id, session);
   await session.loadRaw(raw, flat);
+  clearRenderSig(raw.id);
   return session;
 }
 
@@ -216,6 +224,7 @@ export async function attachFlat(file: File, isDng: boolean, config?: BareRawCon
     const mismatch = flatCompatible(doc, flat);
     if (mismatch) throw new Error(mismatch);
     await session.setFlat(flat);
+    clearRenderSig(doc.id);
     store.updateDoc(doc.id, {
       flat: stripFlat(flat),
       params: {
@@ -297,12 +306,24 @@ export function renderActive(): void {
     const b = bypassStage(doc.params, state.selectedStage);
     compare = { paramsB: b, targetB: state.selectedStage, mode: 2 };
   }
+  const signature = JSON.stringify({
+    params: paramsHash(doc.params),
+    target: state.selectedStage,
+    source: doc.source,
+    view,
+    compare: compare ? [paramsHash(compare.paramsB), compare.targetB, compare.mode] : null,
+  });
+  if (lastRenderSig.get(doc.id) === signature) return;
+  lastRenderSig.set(doc.id, signature);
   const generationPromise = session.renderPreview(doc.params, state.selectedStage, view, compare);
   state.updateDoc(doc.id, { source: 'preview' });
   generationPromise.then((generation) => {
     const current = useStore.getState().docs[doc.id];
     if (current) useStore.getState().updateDoc(doc.id, { generation });
-  }).catch((e) => toast(e instanceof Error ? e.message : String(e)));
+  }).catch((e) => {
+    lastRenderSig.delete(doc.id);
+    toast(e instanceof Error ? e.message : String(e));
+  });
 }
 
 export async function renderFull(): Promise<void> {
@@ -316,6 +337,7 @@ export async function renderFull(): Promise<void> {
   try {
     const generation = await session.renderFull(doc.params, state.selectedStage, view);
     state.updateDoc(doc.id, { source: 'full', generation });
+    clearRenderSig(doc.id);
     state.setBusy(false);
     const current = useStore.getState().docs[doc.id];
     if (current?.stats) {
@@ -346,7 +368,10 @@ export function presentActive(): void {
 }
 
 export function setViewport(viewport: Viewport): void {
-  useStore.getState().setViewport(viewport);
+  const state = useStore.getState();
+  const prev = state.viewport;
+  if (prev.width === viewport.width && prev.height === viewport.height && prev.dpr === viewport.dpr) return;
+  state.setViewport(viewport);
   renderActive();
 }
 
@@ -430,7 +455,7 @@ export async function analyze(kind: AnalysisKind, options?: Record<string, unkno
   const roi = kind === 'histogram' || kind === 'waveform' || kind === 'colorchecker'
     ? null
     : doc.rois[kind] ?? null;
-  state.setBusy(true, `正在计算 ${kind.toUpperCase()}…`);
+  state.setAnalysisBusy(true);
   try {
     let extra = options ?? {};
     if (kind === 'diff') {
@@ -445,18 +470,22 @@ export async function analyze(kind: AnalysisKind, options?: Record<string, unkno
     const result = await session.analyze(doc.params, stage, kind, roi, {
       ...extra,
       bins: 1024,
-      points: doc.probes,
     });
     state.setAnalysis(doc.id, result);
-    state.setBusy(false);
+    state.setAnalysisBusy(false);
   } catch (e) {
-    state.setBusy(false);
+    state.setAnalysisBusy(false);
     toast(e instanceof Error ? e.message : String(e));
   }
 }
 
-export async function analyzeProbes(): Promise<void> {
-  await analyze('probe');
+/** Read the pixel currently displayed under the cursor. */
+export async function probeAt(docId: string, point: Point): Promise<ProbeSample | null> {
+  const state = useStore.getState();
+  const doc = state.docs[docId];
+  const session = sessions.get(docId);
+  if (!doc || !session) return null;
+  return session.probePixel(doc.params, point);
 }
 
 export async function fitColorChecker(): Promise<void> {
@@ -475,7 +504,7 @@ export async function fitColorChecker(): Promise<void> {
     x: p.x / doc.meta.geometry.active.w,
     y: p.y / doc.meta.geometry.active.h,
   }));
-  state.setBusy(true, '正在拟合 ColorChecker…');
+  state.setAnalysisBusy(true);
   try {
     const result = await session.analyze(doc.params, 'denoise', 'colorchecker', null, {
       corners: normalized,
@@ -485,10 +514,10 @@ export async function fitColorChecker(): Promise<void> {
     if (result.kind !== 'colorchecker') throw new Error('拟合返回类型错误');
     state.setAnalysis(doc.id, result);
     state.setColorChecker(doc.id, { ...doc.colorChecker, fit: result });
-    state.setBusy(false);
+    state.setAnalysisBusy(false);
     toast(`CCM 拟合完成：mean ΔE00 ${result.meanDE00.toFixed(2)}，max ${result.maxDE00.toFixed(2)}`);
   } catch (e) {
-    state.setBusy(false);
+    state.setAnalysisBusy(false);
     toast(e instanceof Error ? e.message : String(e));
   }
 }
@@ -827,6 +856,7 @@ export async function removeDoc(id: string): Promise<void> {
     await session.destroy();
     sessions.delete(id);
   }
+  clearRenderSig(id);
   useStore.getState().removeDoc(id);
 }
 

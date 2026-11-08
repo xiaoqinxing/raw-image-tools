@@ -32,7 +32,7 @@ RAW Lab 反过来，把 **从 CFA 到 sRGB 的整条 ISP 管线摊开给你看**
 - **从 RAW 开始，而不是从成片开始**：LibRaw WASM 解包 DNG，裸 RAW 支持 CFA、位宽、packing、端序、stride、active area 与逐通道黑白电平。
 - **每一步都可见、可调、可绕过**：10 个固定阶段，均可 bypass、A/B、查看中间结果、单独导出。
 - **像素不离开浏览器**：无上传、无账号、无服务端推理。关掉网络也能继续处理已加载的图像。
-- **工程级可复现**：参数、快照、预设、ROI、探针、ColorChecker 与视图状态都能保存，方便反复验证。
+- **工程级可复现**：参数、快照、预设、ROI、ColorChecker 与视图状态都能保存，方便反复验证。
 - **性能不靠“云端显卡”**：WebGL2 管线、Worker 解码/分析、阶段缓存与降采样策略，让 24MP RAW 在普通桌面浏览器里保持可交互。
 
 适合相机/ISP 工程师、影像算法工程师、摄影技术爱好者，以及需要演示 RAW 处理流程的教学和评测场景。
@@ -52,7 +52,7 @@ RAW Lab 反过来，把 **从 CFA 到 sRGB 的整条 ISP 管线摊开给你看**
 - **DNG**：LibRaw WASM 解包像素，配合本地 TIFF/DNG 标签解析补齐 `ActiveArea`、`DefaultCrop`、`BlackLevel`、`WhiteLevel`、`ColorMatrix1/2`、`ForwardMatrix1/2`、`AsShotNeutral`、`CalibrationIlluminant`、`Orientation`、`BaselineExposure` 等元数据。
 - **裸 RAW 二进制**：支持 RGGB / BGGR / GRBG / GBRG；8/10/12/14/16-bit；u8/u16、LE/BE、左/右对齐、sample shift；连续 packed 与 MIPI RAW10/12/14；header offset、row stride、active area、逐 CFA 黑白电平。
 - **导入即体检**：逐通道 min/p1/p50/p99/max、黑/白电平越界比例、G1/G2 一致性、字节差、警告与修正建议。
-- **CFA 伪彩预览**：快速确认 Bayer 相位与数据排布是否正确。
+- **CFA 伪彩预览**：默认开启，切到 RAW / 平场 / 白平衡阶段即可确认 Bayer 相位与数据排布。
 - **未执行项透明提示**：OpcodeList、LinearizationTable、BlackLevelDelta 等 DNG 标签不会静默忽略。
 
 ### 固定 10 阶段 ISP 管线
@@ -82,18 +82,19 @@ RAW Lab 反过来，把 **从 CFA 到 sRGB 的整条 ISP 管线摊开给你看**
 
 ### ISP 分析与 ColorChecker
 
-- **直方图**：RGB + 亮度，256/1024 bins，线性/对数，剪切计数。
-- **像素探针**：RAW CFA DN、各阶段 RGB、WB 乘数。
+- **直方图**：RGB + 亮度，256/1024 bins，线性/对数，剪切计数；打开/切换分析面板或阶段时刷新。
+- **像素悬停读数**：鼠标经过画布即在左下角显示坐标、RAW CFA 通道 / DN / 归一化值、WB 乘数、当前阶段 RGB 与 8-bit 值。
 - **SNR**：ROI 内逐通道 mean/std/dB，display 域自动逆 gamma。
 - **MTF**：斜边检测、4× oversampling、Hann、FFT、MTF50/MTF10。
 - **ColorChecker Classic 24**（pre-2014 D65）：手动四角、透视网格、色块采样、最小二乘 + ΔE00 优化、逐块 ΔE00/ΔC'、一键应用 CCM。
 - **波形**：luma / RGB parade。
 - **噪声频谱**：2D FFT、log power、径向平均、H/V 1D PSD、去趋势、Hann。
 - **差异指标**：MAE / PSNR / max diff，对比当前管线与阶段 bypass 或快照。
+- **按需统计**：直方图/波形只在分析面板展开或切换时计算；参数变化只显示“参数已变化”，不随每帧重算；运行分析不会改变画布显示或触发全屏遮罩。
 
 ### 工程、预设与多图对比
 
-- 工程 JSON：图像元数据、裸 RAW 配置、管线参数、快照、ColorChecker、ROI、探针、视图与布局；不嵌入 RAW 本体。
+- 工程 JSON：图像元数据、裸 RAW 配置、管线参数、快照、ColorChecker、ROI、视图与布局；不嵌入 RAW 本体。
 - 打开工程后逐张重新关联 RAW，SHA-256 校验；支持同时关联平场。
 - 自动保存到 IndexedDB，可从工程菜单恢复。
 - 预设只保存管线参数，支持导入 / 导出 / 删除。

@@ -3,21 +3,20 @@ import { useStore, useActiveDoc } from '../state/store';
 import { getSession } from '../services/editor';
 import {
   analyze,
-  analyzeProbes,
   cssToImage,
-  fitColorChecker,
   fitView,
   pickGray,
   imageToCss,
   panBy,
   presentActive,
+  probeAt,
   renderActive,
   renderFull,
   setViewport,
   zoomAt,
 } from '../services/editor';
 import { applyHomography, homographyFromCorners } from '../core/colorchecker/geometry';
-import type { AnalysisKind, Point, Rect } from '../core/types';
+import type { AnalysisKind, Point, ProbeSample, Rect } from '../core/types';
 import { Button } from './controls';
 
 const STAGE_OPTIONS = [
@@ -68,9 +67,27 @@ export function CanvasStage() {
   const ccDraftRef = React.useRef<Point[]>([]);
   const panRef = React.useRef<{ x: number; y: number } | null>(null);
   const splitRef = React.useRef(false);
+  const [sample, setSample] = React.useState<ProbeSample | null>(null);
+  const probeRef = React.useRef<{ inFlight: boolean; next: Point | null; raf: number; hover: boolean }>({
+    inFlight: false,
+    next: null,
+    raf: 0,
+    hover: false,
+  });
 
   React.useEffect(() => { setCcDraft([]); ccDraftRef.current = []; }, [activeId]);
   React.useEffect(() => { if (tool !== 'colorchecker') { setCcDraft([]); ccDraftRef.current = []; } }, [tool]);
+  React.useEffect(() => {
+    probeRef.current.next = null;
+    probeRef.current.hover = false;
+    setSample(null);
+    return () => {
+      if (probeRef.current.raf) window.cancelAnimationFrame(probeRef.current.raf);
+      probeRef.current.raf = 0;
+      probeRef.current.hover = false;
+      probeRef.current.next = null;
+    };
+  }, [activeId]);
 
   React.useEffect(() => {
     const host = hostRef.current;
@@ -144,13 +161,52 @@ export function CanvasStage() {
   }
   const crop = doc.params.output.crop;
   const cropCss = crop ? rectToCss(crop) : null;
+  const sampleHex = sample
+    ? `#${sample.stage.rgb8.map((v) => v.toString(16).padStart(2, '0')).join('')}`
+    : '';
 
   const pointer = (e: React.PointerEvent<HTMLDivElement>): Point => {
     const r = e.currentTarget.getBoundingClientRect();
     return cssToImage(doc, viewport, e.clientX - r.left, e.clientY - r.top);
   };
 
+  const flushProbe = () => {
+    const st = probeRef.current;
+    st.raf = 0;
+    if (st.inFlight || !st.next) return;
+    const point = st.next;
+    st.next = null;
+    st.inFlight = true;
+    const id = doc.id;
+    probeAt(id, point)
+      .then((s) => {
+        st.inFlight = false;
+        if (useStore.getState().activeId !== id) return;
+        if (!probeRef.current.hover) return;
+        if (probeRef.current.next) flushProbe();
+        else setSample(s);
+      })
+      .catch(() => {
+        st.inFlight = false;
+        if (probeRef.current.next) flushProbe();
+      });
+  };
+
+  const queueProbe = (p: Point) => {
+    const st = probeRef.current;
+    const inside = p.x >= 0 && p.y >= 0 && p.x < doc.meta.geometry.active.w && p.y < doc.meta.geometry.active.h;
+    st.hover = inside;
+    if (!inside) {
+      st.next = null;
+      setSample(null);
+      return;
+    }
+    st.next = p;
+    if (!st.inFlight && !st.raf) st.raf = window.requestAnimationFrame(flushProbe);
+  };
+
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'touch') queueProbe(pointer(e));
     if ((abMode !== 'off' || diffMode) && tool === 'pan') {
       const r = e.currentTarget.getBoundingClientRect();
       if (Math.abs(e.clientX - r.left - split * r.width) < 8) {
@@ -173,12 +229,6 @@ export function CanvasStage() {
     if (tool === 'gray') {
       pickGray(p);
       setTool('pan');
-      return;
-    }
-    if (tool === 'probe') {
-      const id = `p${Date.now().toString(36)}`;
-      useStore.getState().addProbe(doc.id, { id, x: p.x, y: p.y, label: `${Math.round(p.x)},${Math.round(p.y)}` });
-      analyzeProbes();
       return;
     }
     if (tool === 'colorchecker') {
@@ -208,6 +258,7 @@ export function CanvasStage() {
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    queueProbe(pointer(e));
     if (splitRef.current) {
       const r = e.currentTarget.getBoundingClientRect();
       const next = Math.max(0.02, Math.min(0.98, (e.clientX - r.left) / Math.max(1, r.width)));
@@ -345,7 +396,6 @@ export function CanvasStage() {
             {k.toUpperCase()}
           </Button>
         ))}
-        <Button variant={tool === 'probe' ? 'primary' : 'ghost'} onClick={() => setTool(tool === 'probe' ? 'pan' : 'probe')}>探针</Button>
         <Button variant={tool === 'colorchecker' ? 'primary' : 'ghost'} onClick={() => setTool(tool === 'colorchecker' ? 'pan' : 'colorchecker')}>色卡四角</Button>
         <Button variant={tool === 'crop' ? 'primary' : 'ghost'} onClick={() => setTool(tool === 'crop' ? 'pan' : 'crop')}>裁剪</Button>
         <div className="ml-auto flex items-center gap-2 text-[11px] text-ink-400">
@@ -367,6 +417,12 @@ export function CanvasStage() {
         onPointerMove={onPointerMove}
         onPointerUp={finishDrag}
         onPointerCancel={finishDrag}
+        onPointerLeave={(e) => {
+          if (e.pointerType === 'touch') return;
+          probeRef.current.hover = false;
+          probeRef.current.next = null;
+          setSample(null);
+        }}
         onDoubleClick={fitView}
       >
         <div ref={hostRef} className="absolute inset-0" />
@@ -392,17 +448,6 @@ export function CanvasStage() {
           {cropCss ? (
             <rect x={cropCss.x} y={cropCss.y} width={cropCss.w} height={cropCss.h} fill="none" stroke="#5fd99a" strokeWidth={1.2} />
           ) : null}
-          {doc.probes.map((p, i) => {
-            const q = imageToCss(doc, viewport, p.x, p.y);
-            return (
-              <g key={p.id}>
-                <circle cx={q.x} cy={q.y} r={6} fill="none" stroke="#ffb85c" strokeWidth={1.2} />
-                <line x1={q.x - 9} y1={q.y} x2={q.x + 9} y2={q.y} stroke="#ffb85c" strokeWidth={0.8} />
-                <line x1={q.x} y1={q.y - 9} x2={q.x} y2={q.y + 9} stroke="#ffb85c" strokeWidth={0.8} />
-                <text x={q.x + 9} y={q.y - 7} fill="#ffb85c" fontSize={10} fontFamily="monospace">P{i + 1}</text>
-              </g>
-            );
-          })}
           {abMode !== 'off' || diffMode ? (
             <g>
               <line x1={split * viewport.width} y1={0} x2={split * viewport.width} y2={viewport.height} stroke="#ffffff" strokeOpacity={0.5} strokeWidth={1} />
@@ -411,10 +456,31 @@ export function CanvasStage() {
             </g>
           ) : null}
         </svg>
-        <div className="canvas-hint pointer-events-none absolute bottom-2 left-2 rounded bg-black/45 px-2 py-1 text-[11px] text-ink-300">
-          <span className="hidden sm:inline">{tool === 'pan' ? '拖拽平移 · 滚轮缩放 · 双击适配' : tool === 'roi' ? '拖拽框选分析 ROI' : tool === 'probe' ? '点击添加探针' : tool === 'gray' ? '点击灰点（平场校正后 RAW）' : tool === 'colorchecker' ? '依次点击色卡四角（TL/TR/BR/BL）' : '拖拽设置输出裁剪'}</span>
-          <span className="sm:hidden">{tool === 'pan' ? '拖拽平移 · 双击适配' : tool === 'roi' ? '拖拽框选 ROI' : tool === 'probe' ? '点击添加探针' : tool === 'gray' ? '点击灰点' : tool === 'colorchecker' ? '点选色卡四角' : '拖拽裁剪'}</span>
-        </div>
+        {sample ? (
+          <div className="pointer-events-none absolute bottom-2 left-2 max-w-[calc(100%-16px)] rounded bg-black/60 px-2 py-1 font-mono text-[10px] leading-4 text-ink-200">
+            <div className="truncate">
+              <span className="text-ink-400">x</span> {sample.x} <span className="text-ink-400">y</span> {sample.y}
+              <span className="text-ink-500"> · </span>{doc.meta.cfa.pattern} {doc.meta.geometry.bitDepth}-bit
+              <span className="text-ink-500"> · </span>RAW {sample.raw.channel} {sample.raw.dn}/{Math.round(sample.raw.white)}
+              <span className="text-ink-500"> · </span>{sample.raw.normalized.toFixed(4)}
+            </div>
+            <div className="truncate">
+              <span className="text-ink-400">WB</span> {sample.wb.multipliers.map((v) => v.toFixed(2)).join(' / ')}
+              <span className="text-ink-500"> · </span>{sample.raw.channel}→{sample.wb.corrected.toFixed(4)}
+            </div>
+            <div className="truncate">
+              <span className="text-ink-400">RGB</span> {sample.stage.rgb.map((v) => v.toFixed(3)).join(' ')}
+              <span className="text-ink-500"> · </span>{sample.stage.rgb8.join(',')}
+              <span className="text-ink-500"> · </span>{sampleHex}
+              <span className="text-ink-500"> · </span>{sample.stage.domain} / {sample.stage.id}
+            </div>
+          </div>
+        ) : (
+          <div className="canvas-hint pointer-events-none absolute bottom-2 left-2 rounded bg-black/45 px-2 py-1 text-[11px] text-ink-300">
+            <span className="hidden sm:inline">{tool === 'pan' ? '拖拽平移 · 滚轮缩放 · 双击适配' : tool === 'roi' ? '拖拽框选分析 ROI' : tool === 'gray' ? '点击灰点（平场校正后 RAW）' : tool === 'colorchecker' ? '依次点击色卡四角（TL/TR/BR/BL）' : '拖拽设置输出裁剪'}</span>
+            <span className="sm:hidden">{tool === 'pan' ? '拖拽平移 · 双击适配' : tool === 'roi' ? '拖拽框选 ROI' : tool === 'gray' ? '点击灰点' : tool === 'colorchecker' ? '点选色卡四角' : '拖拽裁剪'}</span>
+          </div>
+        )}
         <div className="pointer-events-none absolute left-2 top-2 max-w-[70%] truncate rounded bg-black/50 px-2 py-1 text-[11px] text-ink-300 sm:hidden">
           {doc.fileName} · {doc.meta.geometry.active.w}×{doc.meta.geometry.active.h}
         </div>

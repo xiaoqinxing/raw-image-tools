@@ -13,7 +13,7 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 
 | 套件 | 数量 | 结果 |
 |------|------|------|
-| Vitest 单元/数值 | 80 | 全部通过 |
+| Vitest 单元/数值 | 84 | 全部通过 |
 | Playwright E2E：DNG 导入 / 阶段 / 16-bit 导出 / 工程保存 | 1 | 通过 |
 | Playwright E2E：裸 RAW 导入 + 错误配置 | 1 | 通过 |
 | Playwright E2E：ColorChecker 四角 + CCM 拟合 | 1 | 通过 |
@@ -26,7 +26,8 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 | Playwright E2E：预设保存 / 应用 / 导出 | 1 | 通过 |
 | Playwright E2E：桌面 / 平板 / 手机 / 横屏响应式布局与抽屉 | 1 | 通过 |
 | Playwright E2E：状态栏版本号 + 自动更新日志弹窗 | 1 | 通过 |
-| **E2E 合计** | **12** | **全部通过** |
+| Playwright E2E：分析按需统计 / 单次预览 / 悬停读数 | 3 | 通过 |
+| **E2E 合计** | **15** | **全部通过** |
 
 覆盖的数值测试：
 
@@ -37,6 +38,7 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 - 去马赛克：Bilinear / MHC / AHD 常量保持，MHC 与 GPU 结果最大误差约 1.7e-4。
 - 分析：直方图、SNR（高斯噪声 <0.2 dB）、MTF50（高斯模糊斜边误差 <5%）、白噪声频谱平坦度、CCM 最小二乘恢复（mean ΔE00 < 1）。
 - ColorChecker：合成色卡 mean ΔE00 ≈ 0.01，max ≈ 0.03。
+- 悬停读数显示编码：raw-cfa gamma 2.2、camera/linear sRGB 传递函数、display sRGB 保持与 8-bit 映射。
 - 构建信息：版本号 = package major.minor + Git 提交数；git log 解析与异常行过滤。
 - 主题调色板：`src/styles.css` 的 CSS 变量与 `src/ui/palette.ts` 保持一致；所有文字色对 `ink-950/900/850/800` 的对比度 ≥ 4.5:1，主文字 ≥ 12:1；组件中不允许出现低对比 `text-ink-*`。
 
@@ -95,7 +97,9 @@ AHD Quality：
 | 平场、灰点 WB、guided/bilateral 降噪 | 通过 | 平场兼容性检查；Bilateral E2E |
 | Fast MHC/Bilinear GPU；Quality AHD CPU | 通过 | AHD 为净室近似 |
 | CCM 手动/拟合、CSC DNG 推导、USM、裁剪、8/16-bit PNG、任意阶段导出 | 通过 | 16-bit 无 ICC；RAW 阶段灰度 |
-| 直方图/探针/SNR/MTF/波形/噪声频谱/ColorChecker/差异 | 通过 | 差异为 A vs bypass/快照 |
+| 直方图/悬停读数/SNR/MTF/波形/噪声频谱/ColorChecker/差异 | 通过 | 差异为 A vs bypass/快照；统计在展开/切换时刷新，参数变化标记过期 |
+| CFA 伪彩默认开启 | 通过 | 仅影响 raw-cfa 阶段显示 |
+| 分析运行不阻塞画布 | 通过 | 无全屏遮罩、不重发预览、不覆盖当前显示阶段 |
 | 2–4 图对比、2H/2V/4 格、同步缩放平移、独立参数 | 通过 | E2E（3 图）验证 |
 | 工程 JSON 保存/打开/重关联/自动保存 | 通过 | 文件选择器重关联；自动保存 E2E |
 | 预设 CRUD / 导入导出 / IndexedDB | 通过 | 保存/应用/导出 E2E；`window.prompt` 命名 |
@@ -113,3 +117,4 @@ AHD Quality：
 5. File System Access API 持久化句柄未接入；工程重开依赖文件选择器。
 6. 冷启动与硬件 GPU 的 present 性能需要在目标桌面环境复测。
 7. `window.prompt` 命名预设/工程在部分浏览器策略下可能被拦截，后续改为 Radix Dialog。
+8. 旧工程中的 `probes` 字段仍可加载但不再显示；探针交互已由左下角实时悬停读数取代。
