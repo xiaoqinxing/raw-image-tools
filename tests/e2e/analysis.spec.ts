@@ -3,14 +3,9 @@ import path from 'node:path';
 
 const fixture = path.resolve('tests/fixtures/test-gradient.dng');
 
-async function importDng(page: import('@playwright/test').Page) {
-  await page.goto('/');
-  await page.getByRole('button', { name: '导入图像' }).first().click();
-  await page.setInputFiles('.modal input[type=file]', fixture);
-  await page.locator('.modal').getByRole('button', { name: '导入', exact: true }).click();
-  await expect(page.getByText('test-gradient.dng').first()).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByText(/1024 bins/).first()).toBeVisible({ timeout: 20_000 });
-}
+let messages: () => Promise<Array<{ type?: string }>>;
+let clearMessages: () => Promise<void>;
+let countMessages: (type: string) => Promise<number>;
 
 test.describe('analysis scheduling and hover readout', () => {
   test.beforeEach(async ({ page }) => {
@@ -28,29 +23,51 @@ test.describe('analysis scheduling and hover readout', () => {
       } as unknown as typeof Worker.prototype.postMessage;
       Worker.prototype.postMessage = patched;
     });
-    await importDng(page);
+    messages = () => page.evaluate(() => (window as unknown as { __workerMsgs: Array<{ type?: string }> }).__workerMsgs);
+    clearMessages = () => page.evaluate(() => { (window as unknown as { __workerMsgs: Array<{ type?: string }> }).__workerMsgs = []; });
+    countMessages = async (type: string) => (await messages()).filter((m) => m.type === type).length;
+
+    await page.goto('/');
+    await page.getByRole('button', { name: '导入图像' }).first().click();
+    await page.setInputFiles('.modal input[type=file]', fixture);
+    await page.locator('.modal').getByRole('button', { name: '导入', exact: true }).click();
+    await expect(page.getByText('test-gradient.dng').first()).toBeVisible({ timeout: 20_000 });
+    await page.waitForTimeout(1200);
   });
 
-  test('analysis runs only while the dock is open and never dims the canvas', async ({ page }) => {
-    const messages = () => page.evaluate(() => (window as unknown as { __workerMsgs: Array<{ type?: string }> }).__workerMsgs);
-    const clear = () => page.evaluate(() => { (window as unknown as { __workerMsgs: Array<{ type?: string }> }).__workerMsgs = []; });
-    const count = async (type: string) => (await messages()).filter((m) => m.type === type).length;
+  test('statistics stay idle while collapsed and refresh automatically when open', async ({ page }) => {
+    await expect(page.locator('.analysis-dock')).toHaveClass(/is-collapsed/);
+    expect(await countMessages('analyze')).toBe(0);
 
-    // Collapsed dock: parameter changes must not schedule statistics.
-    await page.locator('.analysis-collapse').click();
-    await page.waitForTimeout(200);
-    await clear();
-    await page.locator('aside.app-right').getByRole('button', { name: '白平衡' }).first().click();
-    await page.waitForTimeout(900);
-    expect(await count('analyze')).toBe(0);
-    expect(await count('renderPreview')).toBe(1);
+    // Collapsed: parameter changes must not schedule statistics.
+    await clearMessages();
+    await page.locator('aside.app-right').getByRole('button', { name: 'Fast · Bilinear' }).click();
+    await expect.poll(() => page.evaluate(() => {
+      const s = (window as unknown as { __rawlab: { useStore: { getState: () => { activeId: string; docs: Record<string, { generation: number }> } } } }).__rawlab.useStore.getState();
+      return s.docs[s.activeId].generation;
+    }), { timeout: 10_000 }).toBeGreaterThan(1);
+    await page.waitForTimeout(800);
+    expect(await countMessages('analyze')).toBe(0);
 
     // Expanding the dock schedules exactly one automatic run.
-    await clear();
+    await clearMessages();
     await page.locator('.analysis-collapse').click();
-    await expect.poll(() => count('analyze'), { timeout: 10_000 }).toBeGreaterThan(0);
-    await page.waitForTimeout(500);
-    expect(await count('analyze')).toBe(1);
+    await expect.poll(() => countMessages('analyze'), { timeout: 10_000 }).toBe(1);
+    await expect(page.getByText(/1024 bins/).first()).toBeVisible();
+
+    // Open dock: parameter changes refresh the statistics directly, with no stale badge.
+    const beforeCreated = await page.evaluate(() => {
+      const s = (window as unknown as { __rawlab: { useStore: { getState: () => { activeId: string; docs: Record<string, { analysis: Record<string, { createdAt?: number }> }> } } } }).__rawlab.useStore.getState();
+      return s.docs[s.activeId].analysis.histogram?.createdAt ?? 0;
+    });
+    await clearMessages();
+    await page.locator('aside.app-right').getByRole('button', { name: 'Fast · MHC' }).click();
+    await expect.poll(() => countMessages('analyze'), { timeout: 10_000 }).toBe(1);
+    await expect.poll(async () => page.evaluate(() => {
+      const s = (window as unknown as { __rawlab: { useStore: { getState: () => { activeId: string; docs: Record<string, { analysis: Record<string, { createdAt?: number }> }> } } } }).__rawlab.useStore.getState();
+      return s.docs[s.activeId].analysis.histogram?.createdAt ?? 0;
+    }), { timeout: 10_000 }).toBeGreaterThan(beforeCreated);
+    expect(await page.getByText('参数已变化').count()).toBe(0);
 
     // Manual "recalculate" must not post another preview or a blocking overlay.
     await page.evaluate(() => {
@@ -61,39 +78,47 @@ test.describe('analysis scheduling and hover readout', () => {
       });
       obs.observe(document.body, { childList: true, subtree: true });
     });
-    await clear();
+    await clearMessages();
     await page.getByTestId('analysis-run').click();
-    await expect.poll(() => count('analyze'), { timeout: 10_000 }).toBe(1);
+    await expect.poll(() => countMessages('analyze'), { timeout: 10_000 }).toBe(1);
     await page.waitForTimeout(400);
-    expect(await count('renderPreview')).toBe(0);
-    expect(await count('present')).toBe(0);
+    expect(await countMessages('renderPreview')).toBe(0);
+    expect(await countMessages('present')).toBe(0);
     expect(await page.evaluate(() => (window as unknown as { __overlaySeen?: boolean }).__overlaySeen)).toBe(false);
+
+    // Collapsed again: no analysis work.
+    await page.locator('.analysis-collapse').click();
+    await clearMessages();
+    await page.locator('aside.app-right').getByRole('button', { name: 'Fast · Bilinear' }).click();
+    await page.waitForTimeout(1000);
+    expect(await countMessages('analyze')).toBe(0);
   });
 
   test('switching the viewed stage posts a single preview', async ({ page }) => {
-    await page.evaluate(() => { (window as unknown as { __workerMsgs: Array<{ type?: string }> }).__workerMsgs = []; });
+    await clearMessages();
     await page.locator('aside.app-right').getByRole('button', { name: 'CSC → 线性 sRGB' }).first().click();
-    await expect.poll(async () => {
-      const msgs = await page.evaluate(() => (window as unknown as { __workerMsgs: Array<{ type?: string }> }).__workerMsgs);
-      return msgs.filter((m) => m.type === 'renderPreview').length;
-    }, { timeout: 10_000 }).toBe(1);
+    await expect.poll(() => countMessages('renderPreview'), { timeout: 10_000 }).toBe(1);
     await page.waitForTimeout(500);
-    const msgs = await page.evaluate(() => (window as unknown as { __workerMsgs: Array<{ type?: string }> }).__workerMsgs);
-    expect(msgs.filter((m) => m.type === 'renderPreview').length).toBe(1);
+    expect(await countMessages('renderPreview')).toBe(1);
   });
 
-  test('hover readout shows RAW, white balance and stage RGB', async ({ page }) => {
+  test('hover readout appears in the left rail and status bar', async ({ page }) => {
     const host = page.locator('.canvas-host').first();
     const box = await host.boundingBox();
     expect(box).toBeTruthy();
     await page.mouse.move(box!.x + box!.width * 0.5, box!.y + box!.height * 0.5);
-    await expect(host.getByText(/RAW [RG]/)).toBeVisible({ timeout: 10_000 });
-    const center = await host.innerText();
-    expect(center).toContain('WB');
-    expect(center).toContain('RGB');
-    expect(center).toContain('RGGB');
+    const panel = page.getByTestId('probe-panel');
+    await expect(panel).toBeVisible({ timeout: 10_000 });
+    await expect(panel).toContainText(/RAW [RG]/);
+    await expect(panel).toContainText('WB');
+    await expect(panel).toContainText('RGB');
+    await expect(page.getByTestId('probe-inline')).toContainText('RGB');
 
+    const center = await panel.innerText();
     await page.mouse.move(box!.x + box!.width * 0.62, box!.y + box!.height * 0.4);
-    await expect.poll(async () => host.innerText(), { timeout: 10_000 }).not.toBe(center);
+    await expect.poll(async () => panel.innerText(), { timeout: 10_000 }).not.toBe(center);
+
+    // The readout must not sit on top of the canvas.
+    await expect(host.locator('[data-testid="probe-panel"], [data-testid="probe-inline"]')).toHaveCount(0);
   });
 });

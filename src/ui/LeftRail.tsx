@@ -2,6 +2,7 @@ import React from 'react';
 import { useActiveDoc, useStore } from '../state/store';
 import { addSnapshot, applyPreset, applySnapshot, removeDoc, renderActive, savePreset, setViewport } from '../services/editor';
 import { Button } from './controls';
+import { ProbeReadout } from './ProbeReadout';
 
 export function LeftRail({ onClose }: { onClose?: () => void }) {
   const docs = useStore((s) => s.docs);
@@ -95,10 +96,8 @@ export function LeftRail({ onClose }: { onClose?: () => void }) {
       </div>
 
       <div className="border-t border-ink-700/70 p-3">
-        <div className="text-[10px] leading-4 text-ink-500">
-          纯浏览器 · LibRaw WASM · WebGL2 · 无后端<br />
-          当前版本 0.1.0 · Apache-2.0 · LibRaw LGPL/CDDL
-        </div>
+        <div className="mb-1 text-[10px] font-medium tracking-wide text-ink-400">像素读数</div>
+        <ProbeReadout variant="panel" />
       </div>
     </aside>
   );

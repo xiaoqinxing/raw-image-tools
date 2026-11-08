@@ -21,6 +21,7 @@ test('layout adapts from desktop to tablet, phone and landscape', async ({ page 
   await page.setInputFiles('.modal input[type=file]', fixture);
   await page.getByRole('button', { name: '导入', exact: true }).click();
   await expect(page.locator('.canvas-host canvas')).toBeVisible({ timeout: 30_000 });
+  await page.locator('.analysis-collapse').click();
   await expect(page.getByText(/1024 bins/).first()).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('.app-left')).toBeVisible();
   await expect(page.locator('.app-right')).toBeVisible();

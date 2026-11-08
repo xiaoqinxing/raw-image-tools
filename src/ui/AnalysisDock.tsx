@@ -307,9 +307,7 @@ function DiffView() {
 export function AnalysisDock() {
   const doc = useActiveDoc();
   const [tab, setTab] = React.useState<AnalysisKind>('histogram');
-  const [collapsed, setCollapsed] = React.useState(() =>
-    typeof window !== 'undefined' && window.matchMedia('(max-height: 520px) and (max-width: 1199px)').matches,
-  );
+  const [collapsed, setCollapsed] = React.useState(true);
   const analysisStage = useStore((s) => s.analysisStage);
   const setAnalysisStage = useStore((s) => s.setAnalysisStage);
   const setRoiKind = useStore((s) => s.setRoiKind);
@@ -323,9 +321,8 @@ export function AnalysisDock() {
     return () => mq.removeEventListener('change', onChange);
   }, []);
 
-  // Statistics are refreshed when the dock is opened, when the active tab
-  // changes, or when the document/stage changes. Parameter edits only mark the
-  // result stale; they do not queue a Worker readback on every frame.
+  // Statistics refresh automatically while the dock is expanded. A collapsed
+  // dock performs no analysis work at all.
   const autoKey = doc ? paramsHash(doc.params) : '';
   React.useEffect(() => {
     if (collapsed || !doc || doc.status !== 'ready') return;
@@ -339,7 +336,7 @@ export function AnalysisDock() {
       void analyze(tab, tab === 'histogram' ? { bins: 1024 } : undefined);
     }, 350);
     return () => window.clearTimeout(t);
-  }, [collapsed, doc?.id, doc?.status, tab, analysisStage]);
+  }, [collapsed, doc?.id, doc?.status, doc?.generation, tab, analysisStage, autoKey]);
 
   if (!doc) return null;
 
@@ -360,7 +357,6 @@ export function AnalysisDock() {
     }
   };
   const result = doc.analysis[tab];
-  const stale = !!result && result.paramsHash !== paramsHash(doc.params);
   return (
     <div className={`analysis-dock flex flex-col border-t border-ink-700 bg-ink-900 ${collapsed ? 'is-collapsed' : ''}`}>
       <div className="analysis-toolbar flex items-center border-b border-ink-700/70">
@@ -377,7 +373,6 @@ export function AnalysisDock() {
             <option value="denoise">降噪后</option>
             <option value="sharpen">最终</option>
           </select>
-          {stale ? <span className="badge badge-warn analysis-stale" title="参数已变化，结果可能过期">参数已变化</span> : null}
           {analysisBusy ? <span className="flex items-center gap-1 text-[11px] text-ink-400" data-testid="analysis-busy"><span className="spin" />计算中</span> : null}
           <Button className="btn-xs" variant="primary" onClick={run} testId="analysis-run">{tab === 'colorchecker' ? '拟合' : tab === 'diff' ? '差异' : result ? '重算' : '运行'}</Button>
         </div>

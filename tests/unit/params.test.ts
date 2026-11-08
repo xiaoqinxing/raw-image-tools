@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bypassStage, createDefaultParams, effectiveCcm, effectiveCsc, fromPresetParams, paramsHash, toPresetParams } from '../../src/core/pipeline/params';
+import { bypassStage, createDefaultParams, effectiveCcm, effectiveCsc, fromPresetParams, paramsHash, stageIsActive, toPresetParams } from '../../src/core/pipeline/params';
 import { IDENTITY3 } from '../../src/core/color/matrices';
 
 describe('pipeline params', () => {
@@ -18,6 +18,29 @@ describe('pipeline params', () => {
     const q = bypassStage(p, 'gamma');
     expect(q.gamma.bypass).toBe(true);
     expect(p.gamma.bypass).toBe(false);
+  });
+
+  it('marks downstream stages inactive when an upstream stage is bypassed', () => {
+    const p = createDefaultParams();
+    expect(stageIsActive(p, 'gamma', false)).toBe(true);
+    expect(stageIsActive(p, 'sharpen', false)).toBe(false); // sharpen is bypassed by default
+    p.sharpen.bypass = false;
+    expect(stageIsActive(p, 'sharpen', false)).toBe(true);
+    p.gamma.bypass = true;
+    expect(stageIsActive(p, 'sharpen', false)).toBe(false);
+    expect(stageIsActive(p, 'csc', false)).toBe(true);
+    p.demosaic.bypass = true;
+    expect(stageIsActive(p, 'csc', false)).toBe(false);
+    expect(stageIsActive(p, 'levels', false)).toBe(true);
+    expect(stageIsActive(p, 'flat', false)).toBe(false);
+  });
+
+  it('uses a visible sharpen default and keeps gamma selected for display', () => {
+    const p = createDefaultParams();
+    expect(p.gamma.mode).toBe('srgb');
+    expect(p.sharpen.amount).toBe(100);
+    expect(p.sharpen.radius).toBeCloseTo(1.2, 5);
+    expect(p.sharpen.bypass).toBe(true);
   });
 
   it('round-trips preset params while preserving file-bound fields', () => {

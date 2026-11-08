@@ -12,6 +12,7 @@ import { RelinkDialog } from './ui/ProjectMenu';
 import { useActiveDoc, useStore } from './state/store';
 import { autosaveProject, fitView, loadPresets, renderActive, setStageBypassAndRender } from './services/editor';
 import { BUILD_INFO } from './build-info';
+import { ProbeReadout } from './ui/ProbeReadout';
 
 function StatusBar() {
   const doc = useActiveDoc();
@@ -45,6 +46,7 @@ function StatusBar() {
           <span className="mono">{viewport.width}×{viewport.height}@{viewport.dpr.toFixed(1)}</span>
         </>
       ) : <span>就绪 · 导入 DNG 或裸 RAW</span>}
+      <ProbeReadout variant="inline" />
       <span className="ml-auto flex items-center gap-2">
         {busy ? <><span className="spin" /><span>{busyLabel}</span></> : null}
         <span className="mono">Chrome / WebGL2</span>

@@ -11,12 +11,15 @@ function clamp01(v: number): number {
  * gamma 2.2 encoded; camera/linear sRGB use sRGB encoding; display sRGB is
  * already encoded.
  */
-export function displayRgb(domain: Domain, rgb: readonly [number, number, number]): [number, number, number] {
+export function displayRgb(domain: Domain, rgb: readonly [number, number, number], linearView = false): [number, number, number] {
   if (domain === 'raw-cfa') {
     const v = Math.pow(clamp01(rgb[0]), 1 / 2.2);
     return [v, v, v];
   }
   if (domain === 'camera-rgb' || domain === 'linear-srgb') {
+    if (domain === 'linear-srgb' && linearView) {
+      return [clamp01(rgb[0]), clamp01(rgb[1]), clamp01(rgb[2])];
+    }
     return [srgbEncode(clamp01(rgb[0])), srgbEncode(clamp01(rgb[1])), srgbEncode(clamp01(rgb[2]))];
   }
   return [clamp01(rgb[0]), clamp01(rgb[1]), clamp01(rgb[2])];

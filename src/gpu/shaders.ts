@@ -392,6 +392,7 @@ uniform int uDomain;      // 0 raw-cfa, 1 camera-rgb, 2 linear-srgb, 3 display-s
 uniform int uDomainB;
 uniform int uFalseColor;
 uniform int uShowClipping;
+uniform int uLinearDisplay;
 uniform int uInterp;
 uniform ivec4 uCfaSites;
 uniform float uSplit;
@@ -448,7 +449,9 @@ void main() {
       col = vec3(pow(v, 1.0 / 2.2));
     }
   } else if (dom == 1 || dom == 2) {
-    col = srgbEncode(clamp(s.rgb, 0.0, 1.0));
+    col = (dom == 2 && uLinearDisplay == 1)
+      ? clamp(s.rgb, 0.0, 1.0)
+      : srgbEncode(clamp(s.rgb, 0.0, 1.0));
   } else {
     col = clamp(s.rgb, 0.0, 1.0);
   }

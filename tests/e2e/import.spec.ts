@@ -17,6 +17,7 @@ async function importDng(page: import('@playwright/test').Page) {
 test('imports DNG, renders, histograms and exports 16-bit PNG', async ({ page }) => {
   await importDng(page);
   await expect(page.locator('canvas').first()).toBeVisible();
+  await page.locator('.analysis-collapse').click();
   await expect(page.getByText(/1024 bins/).first()).toBeVisible();
 
   // Switch the viewed stage to linear sRGB and back to final.

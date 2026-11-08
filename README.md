@@ -68,13 +68,14 @@ RAW Lab 反过来，把 **从 CFA 到 sRGB 的整条 ISP 管线摊开给你看**
 | 5 | 降噪 | camera RGB | Guided（亮度/色度分离）或 Bilateral（可分离交叉双边近似），GPU 多 pass |
 | 6 | CCM | camera RGB | 手动 3×3、单位阵、ColorChecker 拟合 |
 | 7 | CSC | linear sRGB | DNG ForwardMatrix / ColorMatrix 推导，Bradford 适应，手动矩阵 |
-| 8 | Gamma | display sRGB | sRGB / Gamma 2.2 / Linear |
-| 9 | USM | display sRGB | 亮度通道高斯模糊 + 阈值 + 强度 |
+| 8 | Gamma | display sRGB | sRGB / Gamma 2.2 / Linear；bypass 时按线性值直接显示（工具栏标记 LINEAR） |
+| 9 | USM | display sRGB | 亮度通道高斯模糊 + 阈值 + 强度；依赖 Gamma 阶段 |
 | 10 | 输出 | — | 裁剪、8/16-bit PNG、任意阶段导出、全分辨率 |
 
 配套能力：
 
 - 中间阶段查看、导出与 **A/B**；快照 A/B、差异图、闪烁对比、可拖动分割线。
+- 上游阶段 bypass 时，下游阶段显示 `SKIP` 并提示不会执行（例如 Gamma bypass 后 USM 不运行）。
 - 高光 ≥1.0 标红、负值 ≤0 标蓝的剪切提示。
 - 阶段缓存：只重算参数变化影响的下游阶段；全分辨率只保留目标阶段。
 - 预览按偶数因子降采样，保持 2×2 CFA 相位；24MP 预览约 1500×1000。
@@ -82,15 +83,15 @@ RAW Lab 反过来，把 **从 CFA 到 sRGB 的整条 ISP 管线摊开给你看**
 
 ### ISP 分析与 ColorChecker
 
-- **直方图**：RGB + 亮度，256/1024 bins，线性/对数，剪切计数；打开/切换分析面板或阶段时刷新。
-- **像素悬停读数**：鼠标经过画布即在左下角显示坐标、RAW CFA 通道 / DN / 归一化值、WB 乘数、当前阶段 RGB 与 8-bit 值。
+- **直方图**：RGB + 亮度，256/1024 bins，线性/对数，剪切计数；分析面板默认折叠，展开后随参数自动刷新。
+- **像素悬停读数**：鼠标经过画布时在左侧栏底部与状态栏显示坐标、RAW CFA 通道 / DN / 归一化值、WB 乘数、当前阶段 RGB 与 8-bit 值，不遮挡画布。
 - **SNR**：ROI 内逐通道 mean/std/dB，display 域自动逆 gamma。
 - **MTF**：斜边检测、4× oversampling、Hann、FFT、MTF50/MTF10。
 - **ColorChecker Classic 24**（pre-2014 D65）：手动四角、透视网格、色块采样、最小二乘 + ΔE00 优化、逐块 ΔE00/ΔC'、一键应用 CCM。
 - **波形**：luma / RGB parade。
 - **噪声频谱**：2D FFT、log power、径向平均、H/V 1D PSD、去趋势、Hann。
 - **差异指标**：MAE / PSNR / max diff，对比当前管线与阶段 bypass 或快照。
-- **按需统计**：直方图/波形只在分析面板展开或切换时计算；参数变化只显示“参数已变化”，不随每帧重算；运行分析不会改变画布显示或触发全屏遮罩。
+- **按需统计**：分析面板默认折叠，折叠时不占用 Worker；展开后参数变化自动重算，也可随时手动“重算”；运行分析不会改变画布显示或触发全屏遮罩。
 
 ### 工程、预设与多图对比
 

@@ -14,7 +14,7 @@ import type {
   Rect,
   StageId,
 } from '../core/types';
-import { createDefaultParams, bypassStage, toPresetParams, fromPresetParams, paramsHash } from '../core/pipeline/params';
+import { createDefaultParams, bypassStage, toPresetParams, fromPresetParams, paramsHash, linearPreviewFor } from '../core/pipeline/params';
 import { getReference } from '../core/color/colorchecker-data';
 import { decodeService, DecodeError } from './decode';
 import { ImageSession, stripFlat, stripRaw } from './session';
@@ -74,6 +74,7 @@ export function viewState(doc: ImageDoc, viewport: Viewport, source: 'preview' |
     diffSigned: false,
     falseColor: useStore.getState().falseColor,
     showClipping: useStore.getState().showClipping,
+    linearDisplay: linearPreviewFor(doc.params, useStore.getState().selectedStage),
     source,
   };
 }
@@ -485,7 +486,7 @@ export async function probeAt(docId: string, point: Point): Promise<ProbeSample 
   const doc = state.docs[docId];
   const session = sessions.get(docId);
   if (!doc || !session) return null;
-  return session.probePixel(doc.params, point);
+  return session.probePixel(doc.params, point, linearPreviewFor(doc.params, state.selectedStage));
 }
 
 export async function fitColorChecker(): Promise<void> {

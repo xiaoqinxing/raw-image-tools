@@ -1,6 +1,6 @@
 import React from 'react';
 import { useActiveDoc, useStore } from '../state/store';
-import { STAGE_LABELS, STAGE_ORDER, effectiveCsc } from '../core/pipeline/params';
+import { STAGE_LABELS, STAGE_ORDER, effectiveCsc, stageIsActive } from '../core/pipeline/params';
 import { applyFittedCcm, attachFlat, renderActive, updateStageAndRender, setStageBypassAndRender, fitColorChecker, savePreset, applyPreset, exportPresets, importPresets, deletePreset } from '../services/editor';
 import { Button, NumberField, Section, Segmented, SliderField, Toggle } from './controls';
 import type { Mat3, StageId, Vec4 } from '../core/types';
@@ -14,6 +14,7 @@ function StageRow({ stage, index }: { stage: StageId; index: number }) {
   const [open, setOpen] = React.useState(stage === 'levels' || stage === 'wb' || stage === 'demosaic' || stage === 'ccm' || stage === 'csc');
   if (!doc) return null;
   const p = doc.params[stage] as { bypass: boolean };
+  const runnable = stageIsActive(doc.params, stage, !!doc.flat);
   const time = doc.stats?.timings.stages[stage];
   const active = selectedStage === stage;
   return (
@@ -29,10 +30,24 @@ function StageRow({ stage, index }: { stage: StageId; index: number }) {
           {STAGE_LABELS[stage]}
         </button>
         {time !== undefined ? <span className="mono text-[10px] text-ink-500">{time.toFixed(0)}ms</span> : null}
-        <span className={`badge ${p.bypass ? '' : 'badge-ok'}`}>{p.bypass ? 'BYP' : 'ON'}</span>
+        <span
+          className={`badge ${p.bypass ? '' : runnable ? 'badge-ok' : 'badge-warn'}`}
+          title={!p.bypass && !runnable ? '上游阶段 bypass，本阶段暂不执行' : undefined}
+        >
+          {p.bypass ? 'BYP' : runnable ? 'ON' : 'SKIP'}
+        </span>
         <Toggle on={!p.bypass} onChange={(v) => setStageBypassAndRender(stage, !v)} />
       </div>
-      {open ? <div className="px-3 pb-3 pt-1"><StageControls stage={stage} /></div> : null}
+      {open ? (
+        <div className="px-3 pb-3 pt-1">
+          {!p.bypass && !runnable ? (
+            <div className="mb-2 rounded border border-[#5c4a24] bg-[#332713] p-2 text-[11px] leading-4 text-[#ffca7a]">
+              上游阶段已 bypass，本阶段暂不执行。
+            </div>
+          ) : null}
+          <StageControls stage={stage} />
+        </div>
+      ) : null}
     </div>
   );
 }

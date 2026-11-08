@@ -68,6 +68,7 @@ export interface Viewport {
   diffSigned: boolean;
   falseColor: boolean;
   showClipping: boolean;
+  linearDisplay: boolean;
   source: 'preview' | 'full';
 }
 
@@ -883,6 +884,7 @@ export class Renderer {
     gl.uniform1i(this.u(p, 'uDomainB'), domainInt(bResult.domain));
     gl.uniform1i(this.u(p, 'uFalseColor'), view.falseColor ? 1 : 0);
     gl.uniform1i(this.u(p, 'uShowClipping'), view.showClipping ? 1 : 0);
+    gl.uniform1i(this.u(p, 'uLinearDisplay'), view.linearDisplay ? 1 : 0);
     gl.uniform1i(this.u(p, 'uInterp'), result.domain === 'raw-cfa' ? 0 : 1);
     gl.uniform4iv(this.u(p, 'uCfaSites'), this.raw?.cfa.siteChannels ?? [0, 1, 2, 3]);
     gl.uniform1f(this.u(p, 'uSplit'), view.split);

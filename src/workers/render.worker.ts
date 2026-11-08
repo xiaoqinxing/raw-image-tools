@@ -30,6 +30,7 @@ let lastView: ViewStateMessage = {
   diffSigned: false,
   falseColor: false,
   showClipping: false,
+  linearDisplay: false,
   source: 'preview',
 };
 
@@ -51,6 +52,7 @@ function toViewport(view: ViewStateMessage): Viewport {
     diffSigned: view.diffSigned,
     falseColor: view.falseColor,
     showClipping: view.showClipping,
+    linearDisplay: view.linearDisplay,
     source: view.source,
   };
 }
@@ -195,8 +197,8 @@ self.onmessage = async (event: MessageEvent<RenderWorkerRequest>) => {
           id: sampled.stage,
           domain: sampled.domain,
           rgb: sampled.rgb,
-          display: displayRgb(sampled.domain, sampled.rgb),
-          rgb8: toRgb8(displayRgb(sampled.domain, sampled.rgb)),
+          display: displayRgb(sampled.domain, sampled.rgb, msg.linearView === true),
+          rgb8: toRgb8(displayRgb(sampled.domain, sampled.rgb, msg.linearView === true)),
         },
       } : null;
       post({ type: 'probePixel', requestId: msg.requestId, sample });

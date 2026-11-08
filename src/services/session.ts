@@ -153,11 +153,11 @@ export class ImageSession {
     }) as Promise<{ multipliers: import('../core/types').Vec4; means: import('../core/types').Vec4; stage: StageId }>;
   }
 
-  async probePixel(params: PipelineParams, point: { x: number; y: number }): Promise<import('../core/types').ProbeSample | null> {
+  async probePixel(params: PipelineParams, point: { x: number; y: number }, linearView = false): Promise<import('../core/types').ProbeSample | null> {
     const requestId = `s${++this.seq}`;
     return new Promise((resolve, reject) => {
       this.pending.set(requestId, { resolve: resolve as (v: unknown) => void, reject });
-      this.post({ type: 'probePixel', requestId, x: point.x, y: point.y, params }).catch(reject);
+      this.post({ type: 'probePixel', requestId, x: point.x, y: point.y, params, linearView }).catch(reject);
     }) as Promise<import('../core/types').ProbeSample | null>;
   }
 

@@ -18,6 +18,7 @@ test('imports a bare RAW and reports bad configuration', async ({ page }) => {
   // SwiftShader shaders. Wait for the document itself rather than the file
   // label in the dialog, then allow extra time for the histogram.
   await expect.poll(() => page.evaluate(() => window.__rawlab.useStore.getState().order.length), { timeout: 60_000 }).toBe(1);
+  await page.locator('.analysis-collapse').click();
   await expect(page.getByText(/1024 bins/).first()).toBeVisible({ timeout: 30_000 });
 
   // Bad header offset: error should be explicit and the dialog should remain.

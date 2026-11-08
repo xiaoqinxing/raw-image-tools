@@ -11,6 +11,8 @@ export interface ViewStateMessage {
   diffSigned: boolean;
   falseColor: boolean;
   showClipping: boolean;
+  /** Show linear-sRGB values without the sRGB display transform. */
+  linearDisplay: boolean;
   source: 'preview' | 'full';
 }
 
@@ -37,7 +39,7 @@ export type RenderWorkerRequest =
   | { type: 'readStage'; requestId: string; source: 'preview' | 'full'; stage: import('../core/types').StageId; rect?: { x: number; y: number; w: number; h: number } }
   | { type: 'exportPng'; requestId: string; params: import('../core/types').PipelineParams; bitDepth: 8 | 16; crop: { x: number; y: number; w: number; h: number } | null; target: import('../core/types').StageId }
   | { type: 'pickGray'; requestId: string; params: import('../core/types').PipelineParams; point: { x: number; y: number }; radius?: number }
-  | { type: 'probePixel'; requestId: string; x: number; y: number; params: import('../core/types').PipelineParams }
+  | { type: 'probePixel'; requestId: string; x: number; y: number; params: import('../core/types').PipelineParams; linearView?: boolean }
   | {
       type: 'analyze';
       requestId: string;

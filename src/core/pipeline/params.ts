@@ -66,6 +66,15 @@ export function stageIndex(stage: StageId): number {
   return STAGE_ORDER.indexOf(stage);
 }
 
+/**
+ * True when the viewer is inspecting the final display stages while the gamma
+ * stage is bypassed. The preview then shows the actual linear output instead of
+ * re-applying the sRGB display transform, so toggling gamma is visible.
+ */
+export function linearPreviewFor(p: PipelineParams, stage: StageId): boolean {
+  return p.gamma.bypass && stageIndex(stage) >= stageIndex('gamma');
+}
+
 export function stageDomain(stage: StageId): Domain {
   return STAGE_DOMAIN[stage];
 }
@@ -129,8 +138,8 @@ export function createDefaultParams(raw?: RawImage): PipelineParams {
     },
     sharpen: {
       bypass: true,
-      amount: 60,
-      radius: 1,
+      amount: 100,
+      radius: 1.2,
       threshold: 0.01,
     },
     output: {
@@ -160,9 +169,15 @@ export function setStageBypass(p: PipelineParams, stage: StageId, bypass: boolea
 }
 
 export function stageIsActive(p: PipelineParams, stage: StageId, hasFlat: boolean): boolean {
+  if (stage === 'levels') return true;
+  if (stage === 'flat') return !p.flat.bypass && hasFlat;
   if (p[stage].bypass) return false;
-  if (stage === 'flat' && !hasFlat) return false;
-  return true;
+  if (stage === 'wb' || stage === 'demosaic') return true;
+  if (stage === 'denoise' || stage === 'ccm' || stage === 'csc' || stage === 'gamma') {
+    return !p.demosaic.bypass;
+  }
+  if (stage === 'sharpen') return !p.demosaic.bypass && !p.gamma.bypass;
+  return false;
 }
 
 export function effectiveCsc(p: PipelineParams): Mat3 {

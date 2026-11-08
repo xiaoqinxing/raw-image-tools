@@ -27,4 +27,10 @@ describe('probe display encoding', () => {
   it('maps display values to 8-bit', () => {
     expect(toRgb8([0, 0.5, 1])).toEqual([0, 128, 255]);
   });
+
+  it('shows linear values without the display transform when requested', () => {
+    const rgb: [number, number, number] = [0.18, 0.5, 1.4];
+    expect(displayRgb('linear-srgb', rgb, true)).toEqual([0.18, 0.5, 1]);
+    expect(displayRgb('camera-rgb', rgb, true)).not.toEqual([0.18, 0.5, 1]);
+  });
 });

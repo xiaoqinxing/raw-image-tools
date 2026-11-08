@@ -16,8 +16,10 @@ import {
   zoomAt,
 } from '../services/editor';
 import { applyHomography, homographyFromCorners } from '../core/colorchecker/geometry';
-import type { AnalysisKind, Point, ProbeSample, Rect } from '../core/types';
+import type { AnalysisKind, Point, Rect } from '../core/types';
+import { linearPreviewFor } from '../core/pipeline/params';
 import { Button } from './controls';
+import { setProbeSample } from './probe-store';
 
 const STAGE_OPTIONS = [
   { value: 'levels', label: 'RAW 归一化' },
@@ -67,7 +69,6 @@ export function CanvasStage() {
   const ccDraftRef = React.useRef<Point[]>([]);
   const panRef = React.useRef<{ x: number; y: number } | null>(null);
   const splitRef = React.useRef(false);
-  const [sample, setSample] = React.useState<ProbeSample | null>(null);
   const probeRef = React.useRef<{ inFlight: boolean; next: Point | null; raf: number; hover: boolean }>({
     inFlight: false,
     next: null,
@@ -80,12 +81,13 @@ export function CanvasStage() {
   React.useEffect(() => {
     probeRef.current.next = null;
     probeRef.current.hover = false;
-    setSample(null);
+    setProbeSample(null);
     return () => {
       if (probeRef.current.raf) window.cancelAnimationFrame(probeRef.current.raf);
       probeRef.current.raf = 0;
       probeRef.current.hover = false;
       probeRef.current.next = null;
+      setProbeSample(null);
     };
   }, [activeId]);
 
@@ -161,9 +163,7 @@ export function CanvasStage() {
   }
   const crop = doc.params.output.crop;
   const cropCss = crop ? rectToCss(crop) : null;
-  const sampleHex = sample
-    ? `#${sample.stage.rgb8.map((v) => v.toString(16).padStart(2, '0')).join('')}`
-    : '';
+  const linearDisplay = linearPreviewFor(doc.params, selectedStage);
 
   const pointer = (e: React.PointerEvent<HTMLDivElement>): Point => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -184,7 +184,7 @@ export function CanvasStage() {
         if (useStore.getState().activeId !== id) return;
         if (!probeRef.current.hover) return;
         if (probeRef.current.next) flushProbe();
-        else setSample(s);
+        else setProbeSample(s);
       })
       .catch(() => {
         st.inFlight = false;
@@ -198,7 +198,7 @@ export function CanvasStage() {
     st.hover = inside;
     if (!inside) {
       st.next = null;
-      setSample(null);
+      setProbeSample(null);
       return;
     }
     st.next = p;
@@ -401,6 +401,7 @@ export function CanvasStage() {
         <div className="ml-auto flex items-center gap-2 text-[11px] text-ink-400">
           <span className="mono">{Math.round(doc.view.zoom * 100)}%</span>
           <span className="badge">{doc.stage}</span>
+          {linearDisplay ? <span className="badge badge-warn" title="Gamma 已 bypass：按线性值直接显示">LINEAR</span> : null}
           {doc.stats ? <span className="mono">{doc.stats.timings.totalMs.toFixed(0)}ms</span> : null}
           {doc.source === 'full' ? <span className="badge badge-warn">FULL</span> : null}
         </div>
@@ -421,7 +422,7 @@ export function CanvasStage() {
           if (e.pointerType === 'touch') return;
           probeRef.current.hover = false;
           probeRef.current.next = null;
-          setSample(null);
+          setProbeSample(null);
         }}
         onDoubleClick={fitView}
       >
@@ -456,31 +457,10 @@ export function CanvasStage() {
             </g>
           ) : null}
         </svg>
-        {sample ? (
-          <div className="pointer-events-none absolute bottom-2 left-2 max-w-[calc(100%-16px)] rounded bg-black/60 px-2 py-1 font-mono text-[10px] leading-4 text-ink-200">
-            <div className="truncate">
-              <span className="text-ink-400">x</span> {sample.x} <span className="text-ink-400">y</span> {sample.y}
-              <span className="text-ink-500"> · </span>{doc.meta.cfa.pattern} {doc.meta.geometry.bitDepth}-bit
-              <span className="text-ink-500"> · </span>RAW {sample.raw.channel} {sample.raw.dn}/{Math.round(sample.raw.white)}
-              <span className="text-ink-500"> · </span>{sample.raw.normalized.toFixed(4)}
-            </div>
-            <div className="truncate">
-              <span className="text-ink-400">WB</span> {sample.wb.multipliers.map((v) => v.toFixed(2)).join(' / ')}
-              <span className="text-ink-500"> · </span>{sample.raw.channel}→{sample.wb.corrected.toFixed(4)}
-            </div>
-            <div className="truncate">
-              <span className="text-ink-400">RGB</span> {sample.stage.rgb.map((v) => v.toFixed(3)).join(' ')}
-              <span className="text-ink-500"> · </span>{sample.stage.rgb8.join(',')}
-              <span className="text-ink-500"> · </span>{sampleHex}
-              <span className="text-ink-500"> · </span>{sample.stage.domain} / {sample.stage.id}
-            </div>
-          </div>
-        ) : (
-          <div className="canvas-hint pointer-events-none absolute bottom-2 left-2 rounded bg-black/45 px-2 py-1 text-[11px] text-ink-300">
-            <span className="hidden sm:inline">{tool === 'pan' ? '拖拽平移 · 滚轮缩放 · 双击适配' : tool === 'roi' ? '拖拽框选分析 ROI' : tool === 'gray' ? '点击灰点（平场校正后 RAW）' : tool === 'colorchecker' ? '依次点击色卡四角（TL/TR/BR/BL）' : '拖拽设置输出裁剪'}</span>
-            <span className="sm:hidden">{tool === 'pan' ? '拖拽平移 · 双击适配' : tool === 'roi' ? '拖拽框选 ROI' : tool === 'gray' ? '点击灰点' : tool === 'colorchecker' ? '点选色卡四角' : '拖拽裁剪'}</span>
-          </div>
-        )}
+        <div className="canvas-hint pointer-events-none absolute bottom-2 left-2 rounded bg-black/45 px-2 py-1 text-[11px] text-ink-300">
+          <span className="hidden sm:inline">{tool === 'pan' ? '拖拽平移 · 滚轮缩放 · 双击适配' : tool === 'roi' ? '拖拽框选分析 ROI' : tool === 'gray' ? '点击灰点（平场校正后 RAW）' : tool === 'colorchecker' ? '依次点击色卡四角（TL/TR/BR/BL）' : '拖拽设置输出裁剪'}</span>
+          <span className="sm:hidden">{tool === 'pan' ? '拖拽平移 · 双击适配' : tool === 'roi' ? '拖拽框选 ROI' : tool === 'gray' ? '点击灰点' : tool === 'colorchecker' ? '点选色卡四角' : '拖拽裁剪'}</span>
+        </div>
         <div className="pointer-events-none absolute left-2 top-2 max-w-[70%] truncate rounded bg-black/50 px-2 py-1 text-[11px] text-ink-300 sm:hidden">
           {doc.fileName} · {doc.meta.geometry.active.w}×{doc.meta.geometry.active.h}
         </div>

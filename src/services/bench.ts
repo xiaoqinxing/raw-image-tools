@@ -142,6 +142,7 @@ export async function runPipelineBenchmark(options: BenchOptions): Promise<Bench
     diffSigned: false,
     falseColor: false,
     showClipping: false,
+    linearDisplay: false,
     source: 'preview' as const,
   };
 
