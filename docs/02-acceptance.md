@@ -13,7 +13,7 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 
 | 套件 | 数量 | 结果 |
 |------|------|------|
-| Vitest 单元/数值 | 89 | 全部通过 |
+| Vitest 单元/数值 | 97 | 全部通过 |
 | Playwright E2E：DNG 导入 / 阶段 / 16-bit 导出 / 工程保存 | 1 | 通过 |
 | Playwright E2E：裸 RAW 导入 + 错误配置 | 1 | 通过 |
 | Playwright E2E：裸 RAW 黑白电平随位宽默认 | 1 | 通过 |
@@ -30,7 +30,8 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 | Playwright E2E：分析按需统计 / 单次预览 / 悬停读数 | 3 | 通过 |
 | Playwright E2E：灰点 WB 采样线性 RAW 阶段 | 1 | 通过 |
 | Playwright E2E：Gamma 线性显示与锐化 SKIP | 1 | 通过 |
-| **E2E 合计** | **18** | **全部通过** |
+| Playwright E2E：ROI 默认全图 + 框选限制 | 1 | 通过 |
+| **E2E 合计** | **19** | **全部通过** |
 
 覆盖的数值测试：
 
@@ -38,6 +39,10 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 - 色彩矩阵求逆、Bradford D50→D65、sRGB 传递函数往返。
 - 裸 RAW：u16 LE/BE、左/右对齐、packed 10/12/14-bit LSB/MSB、MIPI RAW10/12/14、header/stride/active crop/CFA 相位、截断与非法电平。
 - 黑白电平默认：按位宽生成 1/16 满量程黑电平与 $2^{bits}-1$ 白电平（10-bit 64/1023，12-bit 256/4095）。
+- 分析 ROI 裁剪：预览坐标映射、raw-cfa 偶数像素对齐、无 ROI 时全图透传。
+- ColorChecker：透视网格采样 + 非对称相机矩阵往返；拟合 mean ΔE00 < 0.1（转置回归）。
+- 悬停读数：WB 乘数归一化为 R:G:B 比值、CFA G1/G2 折叠为 G。
+- 直方图：ROI 内 R/G/B 均值与 G=1 的 R/G、B/G 比例。
 - DNG：TIFF 标签解析、Black/White/AsShotNeutral/CFA/ActiveArea、LibRaw 解包。
 - 去马赛克：Bilinear / MHC / AHD 常量保持，MHC 与 GPU 结果最大误差约 1.7e-4。
 - 分析：直方图、SNR（高斯噪声 <0.2 dB）、MTF50（高斯模糊斜边误差 <5%）、白噪声频谱平坦度、CCM 最小二乘恢复（mean ΔE00 < 1）。
@@ -103,7 +108,10 @@ AHD Quality：
 | 平场、灰点 WB、guided/bilateral 降噪 | 通过 | 平场兼容性检查；灰点读取线性 RAW 阶段；Bilateral E2E |
 | Fast MHC/Bilinear GPU；Quality AHD CPU | 通过 | AHD 为净室近似 |
 | CCM 手动/拟合、CSC DNG 推导、USM、裁剪、8/16-bit PNG、任意阶段导出 | 通过 | 16-bit 无 ICC；RAW 阶段灰度 |
-| 直方图/悬停读数/SNR/MTF/波形/噪声频谱/ColorChecker/差异 | 通过 | 差异为 A vs bypass/快照；分析面板默认折叠，展开后随参数自动刷新 |
+| 直方图/悬停读数/SNR/MTF/波形/噪声频谱/ColorChecker/差异 | 通过 | 差异为 A vs bypass/快照；分析面板默认折叠，展开后随参数或共享 ROI 自动刷新 |
+| 直方图坐标 | 通过 | 横轴固定 0–1 亮度值，纵轴像素数量自适应；显示 ROI 内 R/G/B 均值与比例 |
+| ColorChecker 入口 | 通过 | 四角框选与拟合均在 ColorChecker 分析面板内，画布工具栏不再重复入口 |
+| 统一分析 ROI | 通过 | 直方图/波形默认全图；SNR/MTF/噪声/差异必须先框选；框选按钮可反复开关；raw-cfa 裁剪保持 Bayer 相位 |
 | CFA 伪彩默认开启 | 通过 | 仅影响 raw-cfa 阶段显示 |
 | Gamma bypass 线性显示 / 上游 bypass 的 SKIP 标记 | 通过 | 工具栏 LINEAR 标记；USM 依赖 Gamma |
 | 像素读数位置 | 通过 | 左侧栏底部 + 状态栏，不覆盖画布 |
@@ -125,4 +133,5 @@ AHD Quality：
 5. File System Access API 持久化句柄未接入；工程重开依赖文件选择器。
 6. 冷启动与硬件 GPU 的 present 性能需要在目标桌面环境复测。
 7. `window.prompt` 命名预设/工程在部分浏览器策略下可能被拦截，后续改为 Radix Dialog。
-8. 旧工程中的 `probes` 字段仍可加载但不再显示；探针交互已由左下角实时悬停读数取代。
+8. 旧工程中的 `probes` 字段仍可加载但不再显示；探针交互已由左侧栏底部 / 状态栏的实时悬停读数取代。
+9. 旧工程按分析类型保存的多个 ROI 会折叠为一个共享 ROI（优先 SNR → MTF → 噪声）；新工程统一保存单个 `roi`。

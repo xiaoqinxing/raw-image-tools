@@ -1,4 +1,4 @@
-import type { Domain } from '../types';
+import type { ChannelId, Domain, Vec4 } from '../types';
 import { srgbEncode } from './lab';
 
 function clamp01(v: number): number {
@@ -27,4 +27,18 @@ export function displayRgb(domain: Domain, rgb: readonly [number, number, number
 
 export function toRgb8(display: readonly [number, number, number]): [number, number, number] {
   return display.map((v) => Math.round(clamp01(v) * 255)) as [number, number, number];
+}
+
+/** Normalize white-balance multipliers to an R:G:B ratio with green = 1. */
+export function wbRatios(multipliers: Vec4): [number, number, number] {
+  const green = (multipliers[1] + multipliers[2]) / 2;
+  const g = Number.isFinite(green) && Math.abs(green) > 1e-9 ? green : 1;
+  return [multipliers[0] / g, 1, multipliers[3] / g];
+}
+
+/** Collapse Bayer sites to the RGB channel users see on the camera. */
+export function cfaChannelLabel(channel: ChannelId): 'R' | 'G' | 'B' {
+  if (channel === 'R') return 'R';
+  if (channel === 'B') return 'B';
+  return 'G';
 }

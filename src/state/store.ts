@@ -18,6 +18,7 @@ import type {
 } from '../core/types';
 
 export type ToolMode = 'pan' | 'roi' | 'colorchecker' | 'crop' | 'gray';
+export type AnalysisTab = AnalysisKind | 'diff';
 
 export interface ImageDoc {
   id: string;
@@ -41,7 +42,8 @@ export interface ImageDoc {
   stats: RenderStats | null;
   analysis: Partial<Record<AnalysisKind, AnalysisResult>>;
   probes: ProbePoint[];
-  rois: Partial<Record<AnalysisKind, Rect>>;
+  /** Shared analysis ROI; null means the full image. */
+  roi: Rect | null;
   view: { zoom: number; panX: number; panY: number };
   source: 'preview' | 'full';
 }
@@ -59,7 +61,7 @@ interface State {
   selectedStage: StageId;
   analysisStage: StageId;
   tool: ToolMode;
-  roiKind: AnalysisKind;
+  analysisTab: AnalysisTab;
   viewport: Viewport;
   falseColor: boolean;
   showClipping: boolean;
@@ -98,7 +100,7 @@ interface State {
   setColorChecker: (id: string, cc: ColorCheckerSession) => void;
   setAnalysis: (id: string, result: AnalysisResult) => void;
   clearAnalysis: (id: string, kind?: AnalysisKind) => void;
-  setRoi: (id: string, kind: AnalysisKind, roi: Rect | null) => void;
+  setRoi: (id: string, roi: Rect | null) => void;
   setView: (id: string, view: Partial<ImageDoc['view']>) => void;
   setViewport: (viewport: Viewport) => void;
   setSelectedStage: (stage: StageId) => void;
@@ -116,7 +118,7 @@ interface State {
   setPresets: (presets: Preset[]) => void;
   setSelectedPresetId: (id: string | null) => void;
   setTool: (tool: ToolMode) => void;
-  setRoiKind: (kind: AnalysisKind) => void;
+  setAnalysisTab: (tab: AnalysisTab) => void;
   setFalseColor: (v: boolean) => void;
   setShowClipping: (v: boolean) => void;
   setSplit: (v: number) => void;
@@ -138,7 +140,7 @@ const initialState = {
   selectedStage: 'sharpen' as StageId,
   analysisStage: 'sharpen' as StageId,
   tool: 'pan' as ToolMode,
-  roiKind: 'snr' as AnalysisKind,
+  analysisTab: 'histogram' as AnalysisTab,
   viewport: { width: 1, height: 1, dpr: 1 },
   falseColor: true,
   showClipping: false,
@@ -228,14 +230,11 @@ export const useStore = create<State>((set, get) => ({
       delete analysis[kind];
       return { docs: { ...s.docs, [id]: { ...doc, analysis } } };
     }),
-  setRoi: (id, kind, roi) =>
+  setRoi: (id, roi) =>
     set((s) => {
       const doc = s.docs[id];
       if (!doc) return s;
-      const rois = { ...doc.rois };
-      if (roi) rois[kind] = roi;
-      else delete rois[kind];
-      return { docs: { ...s.docs, [id]: { ...doc, rois } }, dirty: true };
+      return { docs: { ...s.docs, [id]: { ...doc, roi } }, dirty: true };
     }),
   setView: (id, view) => set((s) => (s.docs[id] ? { docs: { ...s.docs, [id]: { ...s.docs[id], view: { ...s.docs[id].view, ...view } } } } : s)),
   setViewport: (viewport) => set({ viewport }),
@@ -254,7 +253,7 @@ export const useStore = create<State>((set, get) => ({
   setPresets: (presets) => set({ presets }),
   setSelectedPresetId: (selectedPresetId) => set({ selectedPresetId }),
   setTool: (tool) => set({ tool }),
-  setRoiKind: (roiKind) => set({ roiKind }),
+  setAnalysisTab: (analysisTab) => set({ analysisTab }),
   setFalseColor: (falseColor) => set({ falseColor }),
   setShowClipping: (showClipping) => set({ showClipping }),
   setSplit: (split) => set({ split }),

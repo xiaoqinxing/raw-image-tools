@@ -8,6 +8,7 @@ import { computeSnr } from '../core/analysis/snr';
 import { computeMtf } from '../core/analysis/mtf';
 import { computeNoiseSpectrum } from '../core/analysis/noise';
 import { computeDiff } from '../core/analysis/diff';
+import { cropForAnalysis } from '../core/analysis/crop';
 import { fitColorChecker } from '../core/colorchecker/fit';
 import { effectiveCsc, paramsHash, STAGE_DOMAIN } from '../core/pipeline/params';
 import { rawSampleAt } from '../core/pipeline/cpu';
@@ -178,26 +179,19 @@ self.onmessage = async (event: MessageEvent<RenderWorkerRequest>) => {
       const ay = Math.max(0, Math.min(active.h - 1, Math.round(msg.y)));
       const rs = rawSampleAt(raw, ax, ay);
       const channel = raw.cfa.sites[(ay & 1) * 2 + (ax & 1)];
-      const wbGain = msg.params.wb.bypass ? 1 : msg.params.wb.multipliers[rs.channel] ?? 1;
       const sample = sampled ? {
         x: ax,
         y: ay,
         raw: {
           channel,
           dn: rs.dn,
-          normalized: rs.normalized,
-          black: raw.levels.black[rs.channel] ?? 0,
-          white: raw.levels.white[rs.channel] ?? 1,
         },
         wb: {
           multipliers: msg.params.wb.multipliers,
-          corrected: rs.normalized * wbGain,
         },
         stage: {
           id: sampled.stage,
-          domain: sampled.domain,
           rgb: sampled.rgb,
-          display: displayRgb(sampled.domain, sampled.rgb, msg.linearView === true),
           rgb8: toRgb8(displayRgb(sampled.domain, sampled.rgb, msg.linearView === true)),
         },
       } : null;
@@ -228,20 +222,22 @@ self.onmessage = async (event: MessageEvent<RenderWorkerRequest>) => {
       });
       let result: AnalysisResult;
       if (msg.kind === 'histogram') {
+        const crop = cropForAnalysis(pixels, msg.roi ?? null, sx, sy, domain === 'raw-cfa');
         const h = computeHistogram({
-          width: pixels.width,
-          height: pixels.height,
-          data: pixels.data,
+          width: crop.width,
+          height: crop.height,
+          data: crop.data,
           bins: (msg.options?.bins === 1024 ? 1024 : 256) as 256 | 1024,
           domain,
           cfa: domain === 'raw-cfa' ? raw!.cfa : undefined,
         });
         result = { ...h, ...metaFor() } as AnalysisResult;
       } else if (msg.kind === 'waveform') {
+        const crop = cropForAnalysis(pixels, msg.roi ?? null, sx, sy, domain === 'raw-cfa');
         const w = computeWaveform({
-          width: pixels.width,
-          height: pixels.height,
-          data: pixels.data,
+          width: crop.width,
+          height: crop.height,
+          data: crop.data,
           domain,
           cfa: domain === 'raw-cfa' ? raw!.cfa : undefined,
           mode: msg.options?.mode === 'parade' ? 'parade' : 'luma',
@@ -249,7 +245,8 @@ self.onmessage = async (event: MessageEvent<RenderWorkerRequest>) => {
         });
         result = { ...w, ...metaFor() } as AnalysisResult;
       } else if (msg.kind === 'snr') {
-        const roi = msg.roi ?? { x: Math.floor(fullW * 0.4), y: Math.floor(fullH * 0.4), w: Math.floor(fullW * 0.2), h: Math.floor(fullH * 0.2) };
+        if (!msg.roi) throw new Error('SNR 需要先框选 ROI');
+        const roi = msg.roi;
         const s = computeSnr({
           width: pixels.width,
           height: pixels.height,
@@ -258,9 +255,10 @@ self.onmessage = async (event: MessageEvent<RenderWorkerRequest>) => {
           domain,
           cfa: domain === 'raw-cfa' ? raw!.cfa : undefined,
         });
-        result = { ...s, ...metaFor([], roi) } as AnalysisResult;
+        result = { ...s, ...metaFor([], msg.roi ?? null) } as AnalysisResult;
       } else if (msg.kind === 'mtf') {
-        const roi = msg.roi ?? { x: Math.floor(fullW * 0.35), y: Math.floor(fullH * 0.35), w: Math.floor(fullW * 0.3), h: Math.floor(fullH * 0.3) };
+        if (!msg.roi) throw new Error('MTF 需要先框选 ROI');
+        const roi = msg.roi;
         if (domain === 'raw-cfa') throw new Error('MTF 需要去马赛克后的 RGB 阶段');
         const m = computeMtf({
           width: pixels.width,
@@ -269,11 +267,16 @@ self.onmessage = async (event: MessageEvent<RenderWorkerRequest>) => {
           rect: { x: roi.x * sx, y: roi.y * sy, w: roi.w * sx, h: roi.h * sy },
           domain: domain as 'camera-rgb' | 'linear-srgb' | 'display-srgb',
         });
-        const { warnings, ...rest } = m;
-        result = { ...rest, ...metaFor(warnings, roi) } as AnalysisResult;
+        const warnings = [...m.warnings];
+        result = { ...m, ...metaFor(warnings, msg.roi ?? null) } as AnalysisResult;
       } else if (msg.kind === 'noise') {
-        const roi = msg.roi ?? { x: Math.floor(fullW * 0.35), y: Math.floor(fullH * 0.35), w: Math.min(512, Math.floor(fullW * 0.3)), h: Math.min(512, Math.floor(fullH * 0.3)) };
+        if (!msg.roi) throw new Error('噪声频谱需要先框选 ROI');
+        const roi = msg.roi;
         if (domain === 'raw-cfa') throw new Error('噪声频谱需要去马赛克后的 RGB 阶段');
+        const warnings: string[] = [];
+        if (roi.w * sx > 1024 || roi.h * sy > 1024) {
+          warnings.push('噪声频谱最多采样 1024×1024，已从 ROI 中心截取。');
+        }
         const n = computeNoiseSpectrum({
           width: pixels.width,
           height: pixels.height,
@@ -282,20 +285,22 @@ self.onmessage = async (event: MessageEvent<RenderWorkerRequest>) => {
           domain: domain as 'camera-rgb' | 'linear-srgb' | 'display-srgb',
           channel: (msg.options?.channel === 0 || msg.options?.channel === 1 || msg.options?.channel === 2 || msg.options?.channel === 3 ? msg.options.channel : 3) as 0 | 1 | 2 | 3,
         });
-        result = { ...n, ...metaFor([], roi) } as AnalysisResult;
+        result = { ...n, ...metaFor(warnings, msg.roi ?? null) } as AnalysisResult;
       } else if (msg.kind === 'diff') {
+        if (!msg.roi) throw new Error('差异分析需要先框选 ROI');
         const paramsB = msg.options?.paramsB as PipelineParams | undefined;
         if (!paramsB) throw new Error('差异分析缺少 B 参数');
         const targetB = (msg.options?.targetB as StageId | undefined) ?? stage;
-        const aPixels = pixels;
         const bR = renderer.renderPreviewB(paramsB, targetB);
         const bPixels = renderer.readPreviewB(bR.result.stage);
-        if (aPixels.width !== bPixels.width || aPixels.height !== bPixels.height) throw new Error('差异图尺寸不一致');
+        if (pixels.width !== bPixels.width || pixels.height !== bPixels.height) throw new Error('差异图尺寸不一致');
+        const aCrop = cropForAnalysis(pixels, msg.roi, sx, sy, false);
+        const bCrop = cropForAnalysis(bPixels, msg.roi, sx, sy, false);
         const diff = computeDiff({
-          width: aPixels.width,
-          height: aPixels.height,
-          a: aPixels.data,
-          b: bPixels.data,
+          width: aCrop.width,
+          height: aCrop.height,
+          a: aCrop.data,
+          b: bCrop.data,
           domain,
           domainB: bR.result.domain,
           gain: Number(msg.options?.gain ?? 6),

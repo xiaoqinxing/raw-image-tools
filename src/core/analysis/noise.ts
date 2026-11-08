@@ -32,10 +32,12 @@ function toLinear(v: number, domain: string): number {
 
 export function computeNoiseSpectrum(input: NoiseInput): Omit<NoiseSpectrumResult, keyof import('../types').AnalysisMeta> & { kind: 'noise' } {
   const { width, height, data, rect, domain, channel } = input;
-  const x0 = Math.max(0, Math.floor(rect.x));
-  const y0 = Math.max(0, Math.floor(rect.y));
   const rw = Math.max(8, Math.min(1024, Math.floor(rect.w)));
   const rh = Math.max(8, Math.min(1024, Math.floor(rect.h)));
+  // Large ROIs (including the full image) are sampled from the centre so the
+  // spectrum is representative instead of biased to the top-left corner.
+  const x0 = Math.max(0, Math.min(Math.max(0, width - rw), Math.floor(rect.x + Math.max(0, (rect.w - rw) / 2))));
+  const y0 = Math.max(0, Math.min(Math.max(0, height - rh), Math.floor(rect.y + Math.max(0, (rect.h - rh) / 2))));
   const n = nextPow2(Math.max(rw, rh));
   const fft = new FFT(n);
   const sample = (x: number, y: number) => {

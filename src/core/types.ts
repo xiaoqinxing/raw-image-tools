@@ -271,21 +271,16 @@ export interface ProbeSample {
   x: number;
   y: number;
   raw: {
+    /** RAW CFA site channel at this pixel (R, G1, G2 or B). */
     channel: ChannelId;
     dn: number;
-    normalized: number;
-    black: number;
-    white: number;
   };
   wb: {
     multipliers: Vec4;
-    corrected: number;
   };
   stage: {
     id: StageId;
-    domain: Domain;
     rgb: [number, number, number];
-    display: [number, number, number];
     rgb8: [number, number, number];
   };
 }
@@ -314,6 +309,9 @@ export interface ProjectImage {
   params: PipelineParams;
   snapshots: PipelineSnapshot[];
   colorChecker?: ColorCheckerSession;
+  /** Shared analysis ROI; null/undefined means the full image. */
+  roi?: Rect | null;
+  /** @deprecated legacy per-analysis ROIs, read for older projects. */
   rois?: Partial<Record<AnalysisKind, Rect>>;
   probes?: ProbePoint[];
   flat?: FlatFileRef;
@@ -349,7 +347,10 @@ export interface ProjectFile {
   };
   analysis: {
     stage: StageId;
-    rois: Partial<Record<AnalysisKind, Rect>>;
+    /** Shared analysis ROI; null means the full image. */
+    roi?: Rect | null;
+    /** @deprecated legacy per-analysis ROIs. */
+    rois?: Partial<Record<AnalysisKind, Rect>>;
     probes: ProbePoint[];
   };
   ui: {
@@ -398,6 +399,10 @@ export interface HistogramResult extends AnalysisMeta {
   min: number;
   max: number;
   mean: number;
+  /** ROI means in the same domain as the histogram bins (R/G/B). */
+  channelMeans: [number, number, number];
+  /** R:G:B ratio with green normalized to 1. */
+  channelRatios: [number, number, number];
   scale: 'linear' | 'log';
 }
 

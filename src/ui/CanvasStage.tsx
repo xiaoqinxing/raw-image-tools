@@ -2,7 +2,6 @@ import React from 'react';
 import { useStore, useActiveDoc } from '../state/store';
 import { getSession } from '../services/editor';
 import {
-  analyze,
   cssToImage,
   fitView,
   pickGray,
@@ -16,7 +15,7 @@ import {
   zoomAt,
 } from '../services/editor';
 import { applyHomography, homographyFromCorners } from '../core/colorchecker/geometry';
-import type { AnalysisKind, Point, Rect } from '../core/types';
+import type { Point, Rect } from '../core/types';
 import { linearPreviewFor } from '../core/pipeline/params';
 import { Button } from './controls';
 import { setProbeSample } from './probe-store';
@@ -38,7 +37,6 @@ export function CanvasStage() {
   const activeId = useStore((s) => s.activeId);
   const viewport = useStore((s) => s.viewport);
   const tool = useStore((s) => s.tool);
-  const roiKind = useStore((s) => s.roiKind);
   const selectedStage = useStore((s) => s.selectedStage);
   const falseColor = useStore((s) => s.falseColor);
   const abMode = useStore((s) => s.abMode);
@@ -141,7 +139,7 @@ export function CanvasStage() {
     const b = imageToCss(doc, viewport, r.x + r.w, r.y + r.h);
     return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
   };
-  const roi = doc.rois[roiKind];
+  const roi = doc.roi;
   const roiCss = roi ? rectToCss(roi) : null;
   const ccCorners = ccDraft.length ? ccDraft : doc.colorChecker.corners;
   const ccCss = ccCorners?.map((p) => imageToCss(doc, viewport, p.x, p.y)) ?? null;
@@ -297,9 +295,9 @@ export function CanvasStage() {
       h: Math.max(2, Math.round(y1 - y0)),
     };
     if (drag.mode === 'roi') {
-      useStore.getState().setRoi(doc.id, roiKind, r);
+      useStore.getState().setRoi(doc.id, r);
       setDrag(null);
-      analyze(roiKind);
+      // Keep the marquee tool active so the ROI can be adjusted repeatedly.
       return;
     }
     if (drag.mode === 'crop') {
@@ -315,10 +313,6 @@ export function CanvasStage() {
     const fit = Math.min(viewport.width / doc.meta.geometry.active.w, viewport.height / doc.meta.geometry.active.h) * 0.96;
     setView(doc.id, { zoom: Math.max(0.1, 1 / fit), panX: doc.meta.geometry.active.w / 2, panY: doc.meta.geometry.active.h / 2 });
     presentActive();
-  };
-
-  const setA = (kind: AnalysisKind) => {
-    useStore.getState().setRoiKind(kind);
   };
 
   return (
@@ -385,18 +379,6 @@ export function CanvasStage() {
           闪烁
         </Button>
         <div className="mx-1 h-4 w-px bg-ink-700" />
-        <span className="field-label">ROI</span>
-        {(['snr', 'mtf', 'noise'] as AnalysisKind[]).map((k) => (
-          <Button
-            key={k}
-            variant={roiKind === k && tool === 'roi' ? 'primary' : 'ghost'}
-            onClick={() => { setA(k); setTool(tool === 'roi' && roiKind === k ? 'pan' : 'roi'); }}
-            title={`框选 ${k.toUpperCase()} ROI`}
-          >
-            {k.toUpperCase()}
-          </Button>
-        ))}
-        <Button variant={tool === 'colorchecker' ? 'primary' : 'ghost'} onClick={() => setTool(tool === 'colorchecker' ? 'pan' : 'colorchecker')}>色卡四角</Button>
         <Button variant={tool === 'crop' ? 'primary' : 'ghost'} onClick={() => setTool(tool === 'crop' ? 'pan' : 'crop')}>裁剪</Button>
         <div className="ml-auto flex items-center gap-2 text-[11px] text-ink-400">
           <span className="mono">{Math.round(doc.view.zoom * 100)}%</span>
@@ -438,7 +420,7 @@ export function CanvasStage() {
           {roiCss ? (
             <g>
               <rect x={roiCss.x} y={roiCss.y} width={roiCss.w} height={roiCss.h} fill="none" stroke="#5cb0ff" strokeWidth={1.2} strokeDasharray="4 3" />
-              <text x={roiCss.x + 4} y={roiCss.y - 4} fill="#a8d2ff" fontSize={10} fontFamily="monospace">{roiKind.toUpperCase()} ROI</text>
+              <text x={roiCss.x + 4} y={roiCss.y - 4} fill="#a8d2ff" fontSize={10} fontFamily="monospace">ROI {roi ? `${Math.round(roi.w)}×${Math.round(roi.h)}` : ''}</text>
             </g>
           ) : null}
           {drag && drag.mode !== 'pan' ? (() => {
@@ -458,8 +440,8 @@ export function CanvasStage() {
           ) : null}
         </svg>
         <div className="canvas-hint pointer-events-none absolute bottom-2 left-2 rounded bg-black/45 px-2 py-1 text-[11px] text-ink-300">
-          <span className="hidden sm:inline">{tool === 'pan' ? '拖拽平移 · 滚轮缩放 · 双击适配' : tool === 'roi' ? '拖拽框选分析 ROI' : tool === 'gray' ? '点击灰点（平场校正后 RAW）' : tool === 'colorchecker' ? '依次点击色卡四角（TL/TR/BR/BL）' : '拖拽设置输出裁剪'}</span>
-          <span className="sm:hidden">{tool === 'pan' ? '拖拽平移 · 双击适配' : tool === 'roi' ? '拖拽框选 ROI' : tool === 'gray' ? '点击灰点' : tool === 'colorchecker' ? '点选色卡四角' : '拖拽裁剪'}</span>
+          <span className="hidden sm:inline">{tool === 'pan' ? '拖拽平移 · 滚轮缩放 · 双击适配' : tool === 'roi' ? '拖拽框选分析 ROI · Esc 结束 · Alt+拖拽平移' : tool === 'gray' ? '点击灰点（平场校正后 RAW）' : tool === 'colorchecker' ? '依次点击色卡四角（TL/TR/BR/BL）' : '拖拽设置输出裁剪'}</span>
+          <span className="sm:hidden">{tool === 'pan' ? '拖拽平移 · 双击适配' : tool === 'roi' ? '拖拽框选 ROI · 可连续调整' : tool === 'gray' ? '点击灰点' : tool === 'colorchecker' ? '点选色卡四角' : '拖拽裁剪'}</span>
         </div>
         <div className="pointer-events-none absolute left-2 top-2 max-w-[70%] truncate rounded bg-black/50 px-2 py-1 text-[11px] text-ink-300 sm:hidden">
           {doc.fileName} · {doc.meta.geometry.active.w}×{doc.meta.geometry.active.h}

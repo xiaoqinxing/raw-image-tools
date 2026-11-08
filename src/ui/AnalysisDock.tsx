@@ -1,11 +1,11 @@
 import React from 'react';
-import { useActiveDoc, useStore } from '../state/store';
+import { useActiveDoc, useStore, type AnalysisTab } from '../state/store';
 import { analyze, applyFittedCcm, fitColorChecker, renderActive } from '../services/editor';
-import type { AnalysisKind, AnalysisResult, ColorCheckerResult, HistogramResult, MtfResult, NoiseSpectrumResult, SnrResult, WaveformResult } from '../core/types';
+import type { AnalysisKind, AnalysisResult, ColorCheckerResult, HistogramResult, MtfResult, NoiseSpectrumResult, Rect, SnrResult, WaveformResult } from '../core/types';
 import { Button, Segmented } from './controls';
 import { paramsHash } from '../core/pipeline/params';
 
-const TABS: Array<{ id: AnalysisKind | 'diff'; label: string }> = [
+const TABS: Array<{ id: AnalysisTab; label: string }> = [
   { id: 'histogram', label: '直方图' },
   { id: 'waveform', label: '波形' },
   { id: 'snr', label: 'SNR' },
@@ -15,8 +15,11 @@ const TABS: Array<{ id: AnalysisKind | 'diff'; label: string }> = [
   { id: 'diff', label: '差异' },
 ];
 
-/** Tabs that are cheap enough to refresh automatically while the dock is open. */
-const AUTO_TABS = new Set<AnalysisKind>(['histogram', 'waveform']);
+function sameRect(a: Rect | null | undefined, b: Rect | null): boolean {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  return a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
+}
 
 function useAnalysis<T extends AnalysisResult>(kind: AnalysisKind): T | null {
   const doc = useActiveDoc();
@@ -26,6 +29,13 @@ function useAnalysis<T extends AnalysisResult>(kind: AnalysisKind): T | null {
 function HistogramView({ result }: { result: HistogramResult }) {
   const ref = React.useRef<HTMLCanvasElement>(null);
   const [log, setLog] = React.useState(false);
+  const maxCount = React.useMemo(() => {
+    let max = 1;
+    for (const ch of [result.channels.r, result.channels.g, result.channels.b, result.channels.y]) {
+      for (let i = 0; i < ch.length; i++) if (ch[i] > max) max = ch[i];
+    }
+    return max;
+  }, [result]);
   React.useEffect(() => {
     const c = ref.current;
     if (!c) return;
@@ -37,59 +47,101 @@ function HistogramView({ result }: { result: HistogramResult }) {
       const ctx = c.getContext('2d')!;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
+
+      const padL = 48, padR = 12, padT = 16, padB = 34;
+      const plotW = Math.max(1, w - padL - padR);
+      const plotH = Math.max(1, h - padT - padB);
+      const yFrac = (count: number) => log
+        ? Math.min(1, Math.log10(1 + count) / Math.log10(1 + maxCount))
+        : Math.min(1, count / maxCount);
+      const fmtCount = (v: number) => v >= 1e6
+        ? `${(v / 1e6).toFixed(v >= 1e7 ? 0 : 1)}M`
+        : v >= 1e3
+          ? `${(v / 1e3).toFixed(v >= 1e4 ? 0 : 1)}k`
+          : `${Math.round(v)}`;
+
       ctx.fillStyle = '#12171c';
       ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#0e1318';
+      ctx.fillRect(padL, padT, plotW, plotH);
+
       ctx.strokeStyle = '#2e3942';
-      for (let i = 1; i < 4; i++) {
-        const x = (w * i) / 4;
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= 4; i++) {
+        const x = padL + (plotW * i) / 4;
+        ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + plotH); ctx.stroke();
       }
-      const count = result.bins;
-      let max = 1;
-      for (const ch of [result.channels.r, result.channels.g, result.channels.b, result.channels.y]) {
-        for (let i = 0; i < count; i++) {
-          const v = log ? Math.log10(1 + ch[i]) : ch[i];
-          if (v > max) max = v;
+      ctx.fillStyle = '#94a3b0';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'right';
+      for (let i = 0; i <= 4; i++) {
+        const count = (maxCount * i) / 4;
+        const y = padT + plotH * (1 - yFrac(count));
+        if (i > 0) {
+          ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
         }
+        ctx.fillText(fmtCount(count), padL - 5, y + 3.5);
       }
-      const drawSeries = (arr: Uint32Array, color: string, fill = false) => {
+      ctx.textAlign = 'left';
+      ctx.fillText('数量', 4, 10);
+      ctx.textAlign = 'center';
+      for (let i = 0; i <= 4; i++) {
+        const x = padL + (plotW * i) / 4;
+        ctx.fillText((i / 4).toFixed(2), x, h - 18);
+      }
+      ctx.fillText('亮度值', padL + plotW / 2, h - 4);
+
+      const count = result.bins;
+      const series = (arr: Uint32Array, color: string) => {
         ctx.beginPath();
         for (let i = 0; i < count; i++) {
-          const v = log ? Math.log10(1 + arr[i]) : arr[i];
-          const x = (i / (count - 1)) * w;
-          const y = h - (v / max) * (h - 6);
+          const x = padL + (i / Math.max(1, count - 1)) * plotW;
+          const y = padT + plotH * (1 - yFrac(arr[i]));
           if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-        if (fill) {
-          ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
-          ctx.fillStyle = color; ctx.globalAlpha = 0.18; ctx.fill(); ctx.globalAlpha = 1;
         }
         ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.stroke();
       };
-      drawSeries(result.channels.r, '#ff7b7b');
-      drawSeries(result.channels.g, '#5fd99a');
-      drawSeries(result.channels.b, '#5cb0ff');
-      drawSeries(result.channels.y, '#d5dde5');
-      ctx.fillStyle = '#94a3b0'; ctx.font = '11px monospace';
-      ctx.fillText(`${result.min.toFixed(3)}`, 3, h - 3);
-      ctx.fillText(`${result.max.toFixed(3)}`, w - 42, h - 3);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(padL, padT, plotW, plotH);
+      ctx.clip();
+      series(result.channels.r, '#ff7b7b');
+      series(result.channels.g, '#5fd99a');
+      series(result.channels.b, '#5cb0ff');
+      series(result.channels.y, '#d5dde5');
+      ctx.restore();
     };
     const ro = new ResizeObserver(draw);
     ro.observe(c);
     draw();
     return () => ro.disconnect();
-  }, [result, log]);
+  }, [result, log, maxCount]);
+  const [meanR, meanG, meanB] = result.channelMeans;
+  const [ratioR, , ratioB] = result.channelRatios;
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink-400">
           <span className="mono">{result.bins} bins</span>
           <span>clip low {result.clipped.low.reduce((a, b) => a + b, 0)} / high {result.clipped.high.reduce((a, b) => a + b, 0)}</span>
-          <span className="mono">mean {result.mean.toFixed(4)}</span>
+          <span className="mono">Y 均值 {result.mean.toFixed(4)}</span>
+          <span className="flex items-center gap-1.5">
+            <span className="text-[#ff7b7b]">R</span>
+            <span className="text-[#5fd99a]">G</span>
+            <span className="text-[#5cb0ff]">B</span>
+            <span className="text-ink-200">Y</span>
+          </span>
         </div>
         <Segmented value={log ? 'log' : 'linear'} onChange={(v) => setLog(v === 'log')} options={[{ value: 'linear', label: '线性' }, { value: 'log', label: '对数' }]} />
       </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-ink-400" data-testid="histogram-stats">
+        <span>R 均值 <span className="mono text-[#ff7b7b]">{meanR.toFixed(4)}</span></span>
+        <span>G 均值 <span className="mono text-[#5fd99a]">{meanG.toFixed(4)}</span></span>
+        <span>B 均值 <span className="mono text-[#5cb0ff]">{meanB.toFixed(4)}</span></span>
+        <span>比例 R/G <span className="mono">{ratioR.toFixed(3)}</span> · B/G <span className="mono">{ratioB.toFixed(3)}</span>（G=1）</span>
+      </div>
       <canvas ref={ref} className="hist-canvas min-h-[90px] w-full flex-1 rounded border border-ink-700" />
+      <div className="text-[10px] text-ink-500">横轴固定 0–1 亮度值；纵轴为像素数量（自适应）。R/G/B 均值为当前 ROI 内统计。</div>
     </div>
   );
 }
@@ -118,8 +170,7 @@ function SnrView({ result }: { result: SnrResult }) {
           ))}
         </tbody>
       </table>
-      <div className="text-[11px] text-ink-500">SNR = 20log10(mean/std)，线性域；display 阶段先逆 gamma。ROI 为矩形平坦区域。</div>
-      <Button className="btn-xs" onClick={() => { useStore.getState().setRoiKind('snr'); useStore.getState().setTool('roi'); }}>重新框选 ROI</Button>
+      <div className="text-[11px] text-ink-500">SNR = 20log10(mean/std)，线性域；display 阶段先逆 gamma。统计范围为下方共享 ROI。</div>
     </div>
   );
 }
@@ -169,8 +220,7 @@ function MtfView({ result }: { result: MtfResult }) {
       </div>
       <canvas ref={ref} className="min-h-[110px] w-full flex-1 rounded border border-ink-700" />
       <div className="flex items-center gap-2">
-        <Button className="btn-xs" onClick={() => { useStore.getState().setRoiKind('mtf'); useStore.getState().setTool('roi'); }}>重新框选斜边 ROI</Button>
-        <span className="text-[11px] text-ink-500">ISO 12233 · 4× oversampling · Hann · FFT</span>
+        <span className="text-[11px] text-ink-500">在所选 ROI 内检测斜边。ISO 12233 · 4× oversampling · Hann · FFT</span>
       </div>
     </div>
   );
@@ -203,10 +253,7 @@ function SpectrumView({ result }: { result: NoiseSpectrumResult }) {
       <canvas ref={ref} className="h-[150px] w-full rounded border border-ink-700 sm:h-[170px] sm:w-[300px] sm:shrink-0" style={{ imageRendering: 'pixelated' }} />
       <div className="min-w-0 flex-1">
         <div className="text-[11px] text-ink-300">2D FFT · log power · {result.width}×{result.height}</div>
-        <div className="mt-1 text-[11px] text-ink-500">去趋势 plane · Hann 窗 · 径向平均 · H/V 1D PSD</div>
-        <div className="mt-2 flex gap-2">
-          <Button className="btn-xs" onClick={() => { useStore.getState().setRoiKind('noise'); useStore.getState().setTool('roi'); }}>重新框选平坦 ROI</Button>
-        </div>
+        <div className="mt-2 text-[11px] text-ink-500">在所选 ROI 内计算（中心最多 1024×1024）· 去趋势 plane · Hann 窗 · 径向平均 · H/V 1D PSD</div>
         <div className="mt-2 h-16 overflow-hidden">
           <div className="flex h-full items-end gap-[1px]">
             {result.radial.filter((_, i) => i % 2 === 0).map((p, i) => <div key={i} className="flex-1 bg-[#5cb0ff]/70" style={{ height: `${Math.max(2, p.power * 100)}%` }} />)}
@@ -217,11 +264,13 @@ function SpectrumView({ result }: { result: NoiseSpectrumResult }) {
   );
 }
 
-function ColorCheckerView({ result }: { result: ColorCheckerResult }) {
+function ColorCheckerView({ result }: { result: ColorCheckerResult | null }) {
   const doc = useActiveDoc();
   const setColorChecker = useStore((s) => s.setColorChecker);
   const setTool = useStore((s) => s.setTool);
+  const tool = useStore((s) => s.tool);
   if (!doc) return null;
+  const fit = result ?? doc.colorChecker.fit ?? null;
   return (
     <div className="flex h-full flex-col gap-3 overflow-auto scroll-thin sm:flex-row sm:overflow-hidden">
       <div className="w-full shrink-0 space-y-2 sm:w-[260px]">
@@ -234,37 +283,58 @@ function ColorCheckerView({ result }: { result: ColorCheckerResult }) {
           <option value="classic24-pre2014-d65">Classic 24 · pre-2014 · D65</option>
         </select>
         <div className="flex flex-wrap gap-1">
-          <Button className="btn-xs" onClick={() => setTool('colorchecker')}>四角框选</Button>
+          <Button className="btn-xs" variant={tool === 'colorchecker' ? 'primary' : 'ghost'} onClick={() => setTool(tool === 'colorchecker' ? 'pan' : 'colorchecker')}>
+            四角框选
+          </Button>
           <Button className="btn-xs" onClick={() => setColorChecker(doc.id, { ...doc.colorChecker, corners: null, fit: undefined })}>重置</Button>
           <Button className="btn-xs" variant="primary" onClick={fitColorChecker} disabled={!doc.colorChecker.corners}>拟合 CCM</Button>
         </div>
         <div className="kv"><span>四角</span><span className="mono">{doc.colorChecker.corners?.length ?? 0}/4</span></div>
-        <div className="kv"><span>有效块</span><span className="mono">{result.validCount}/24</span></div>
-        <div className="rounded border border-ink-700 p-2">
-          <div className="text-[11px] text-ink-500">mean ΔE00</div>
-          <div className="mono text-[20px]" style={{ color: result.meanDE00 <= 2.5 ? '#7fe3ae' : '#ffca7a' }}>{result.meanDE00.toFixed(3)}</div>
-          <div className="text-[11px] text-ink-500">max ΔE00</div>
-          <div className="mono text-[15px]" style={{ color: result.maxDE00 <= 5 ? '#7fe3ae' : '#ffca7a' }}>{result.maxDE00.toFixed(3)}</div>
-          <div className="mt-1 text-[11px] text-ink-500">mean |ΔC'| {result.meanAbsDC.toFixed(3)}</div>
-          <div className="text-[11px] text-ink-500">{result.method === 'de00-optimized' ? 'ΔE00 优化' : '最小二乘'}</div>
-        </div>
-        <Button className="btn-xs" variant="primary" onClick={applyFittedCcm}>应用 CCM 到管线</Button>
+        {fit ? (
+          <>
+            <div className="kv"><span>有效块</span><span className="mono">{fit.validCount}/24</span></div>
+            <div className="rounded border border-ink-700 p-2">
+              <div className="text-[11px] text-ink-500">mean ΔE00</div>
+              <div className="mono text-[20px]" style={{ color: fit.meanDE00 <= 2.5 ? '#7fe3ae' : '#ffca7a' }}>{fit.meanDE00.toFixed(3)}</div>
+              <div className="text-[11px] text-ink-500">max ΔE00</div>
+              <div className="mono text-[15px]" style={{ color: fit.maxDE00 <= 5 ? '#7fe3ae' : '#ffca7a' }}>{fit.maxDE00.toFixed(3)}</div>
+              <div className="mt-1 text-[11px] text-ink-500">mean |ΔC'| {fit.meanAbsDC.toFixed(3)}</div>
+              <div className="text-[11px] text-ink-500">{fit.method === 'de00-optimized' ? 'ΔE00 优化' : '最小二乘'}</div>
+            </div>
+            {fit.warnings.length ? (
+              <div className="rounded border border-[#5c4a24] bg-[#332713] px-2 py-1 text-[11px] leading-4 text-[#ffca7a]">
+                {fit.warnings.join(' · ')}
+              </div>
+            ) : null}
+            <Button className="btn-xs" variant="primary" onClick={applyFittedCcm}>应用 CCM 到管线</Button>
+          </>
+        ) : (
+          <div className="rounded border border-ink-700 p-2 text-[11px] leading-4 text-ink-500">
+            点击“四角框选”后，在画布上依次点选色卡四角（TL / TR / BR / BL），再点“拟合 CCM”。
+          </div>
+        )}
       </div>
       <div className="min-w-0 flex-1 overflow-auto scroll-thin">
-        <table className="w-full text-[11px]">
-          <thead className="text-ink-500"><tr className="text-left"><th>#</th><th>色块</th><th>ΔE00</th><th>ΔC'</th><th>used</th></tr></thead>
-          <tbody className="mono">
-            {result.patches.map((p, i) => (
-              <tr key={i} className="border-t border-ink-700/60">
-                <td>{i + 1}</td>
-                <td className="font-sans text-ink-300">{p.name}</td>
-                <td style={{ color: p.dE00 > 5 ? '#ff9a9a' : p.dE00 > 2.5 ? '#ffca7a' : '#7fe3ae' }}>{p.dE00.toFixed(2)}</td>
-                <td>{p.dC.toFixed(2)}</td>
-                <td>{p.used ? '✓' : '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {fit ? (
+          <table className="w-full text-[11px]">
+            <thead className="text-ink-500"><tr className="text-left"><th>#</th><th>色块</th><th>ΔE00</th><th>ΔC'</th><th>used</th></tr></thead>
+            <tbody className="mono">
+              {fit.patches.map((p, i) => (
+                <tr key={i} className="border-t border-ink-700/60">
+                  <td>{i + 1}</td>
+                  <td className="font-sans text-ink-300">{p.name}</td>
+                  <td style={{ color: p.dE00 > 5 ? '#ff9a9a' : p.dE00 > 2.5 ? '#ffca7a' : '#7fe3ae' }}>{p.dE00.toFixed(2)}</td>
+                  <td>{p.dC.toFixed(2)}</td>
+                  <td>{p.used ? '✓' : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="flex h-full items-center justify-center text-center text-[11px] text-ink-500">
+            尚未拟合。四角框选完成后点击“拟合 CCM”。
+          </div>
+        )}
       </div>
     </div>
   );
@@ -282,14 +352,15 @@ function DiffView() {
     c.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(diff.rgba), diff.width ?? 1, diff.height ?? 1), 0, 0);
   }, [diff]);
   if (!doc) return null;
+  const roi = doc.roi;
   return (
     <div className="flex h-full flex-col gap-3 overflow-auto scroll-thin sm:flex-row sm:overflow-hidden">
       <div className="min-w-0 flex-1 space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <Button className="btn-xs" onClick={() => { useStore.getState().setDiffMode(!useStore.getState().diffMode); renderActive(); }}>差异预览</Button>
           <Button className="btn-xs" onClick={() => { useStore.getState().setAbMode('stage'); renderActive(); }}>A/B 当前 vs bypass</Button>
-          <Button className="btn-xs" variant="primary" onClick={() => analyze('diff')}>计算差异指标</Button>
-          <span className="text-[11px] text-ink-500">A/B 在画布中显示；指标在 Worker 内计算。</span>
+          <Button className="btn-xs" variant="primary" onClick={() => { if (roi) analyze('diff'); else useStore.getState().setTool('roi'); }}>计算差异指标</Button>
+          <span className="text-[11px] text-ink-500">{roi ? 'A/B 在画布中显示；指标在 Worker 内计算。' : '差异分析需要先框选 ROI。'}</span>
         </div>
         {diff ? (
           <div className="grid grid-cols-3 gap-2">
@@ -306,13 +377,19 @@ function DiffView() {
 
 export function AnalysisDock() {
   const doc = useActiveDoc();
-  const [tab, setTab] = React.useState<AnalysisKind>('histogram');
+  const tab = useStore((s) => s.analysisTab);
+  const setTab = useStore((s) => s.setAnalysisTab);
   const [collapsed, setCollapsed] = React.useState(true);
   const analysisStage = useStore((s) => s.analysisStage);
   const setAnalysisStage = useStore((s) => s.setAnalysisStage);
-  const setRoiKind = useStore((s) => s.setRoiKind);
+  const tool = useStore((s) => s.tool);
   const setTool = useStore((s) => s.setTool);
+  const setRoi = useStore((s) => s.setRoi);
+  const clearAnalysis = useStore((s) => s.clearAnalysis);
   const analysisBusy = useStore((s) => s.analysisBusy);
+  const requiresRoi = tab === 'snr' || tab === 'mtf' || tab === 'noise' || tab === 'diff';
+  const roiKey = doc?.roi ? `${doc.roi.x},${doc.roi.y},${doc.roi.w},${doc.roi.h}` : 'full';
+  const lastRunKey = React.useRef<{ roiKey: string; tab: AnalysisTab } | null>(null);
 
   React.useEffect(() => {
     const mq = window.matchMedia('(max-height: 520px) and (max-width: 1199px)');
@@ -321,48 +398,52 @@ export function AnalysisDock() {
     return () => mq.removeEventListener('change', onChange);
   }, []);
 
-  // Statistics refresh automatically while the dock is expanded. A collapsed
-  // dock performs no analysis work at all.
+  // Analyses refresh automatically while the dock is expanded, including after
+  // parameter or ROI changes. A collapsed dock performs no analysis work.
   const autoKey = doc ? paramsHash(doc.params) : '';
   React.useEffect(() => {
     if (collapsed || !doc || doc.status !== 'ready') return;
-    if (!AUTO_TABS.has(tab)) return;
-    const current = doc.analysis[tab];
-    if (current && current.paramsHash === autoKey && current.stage === analysisStage) return;
+    if (tab === 'colorchecker') return;
+    if (requiresRoi && !doc.roi) return;
+    const current = tab === 'diff' ? doc.analysis.diff : doc.analysis[tab];
+    if (current && current.paramsHash === autoKey && current.stage === analysisStage && sameRect(current.roi, doc.roi)) return;
     const id = doc.id;
+    // ROI or tab changes recompute immediately; slider edits are debounced.
+    const immediate = lastRunKey.current !== null && (lastRunKey.current.roiKey !== roiKey || lastRunKey.current.tab !== tab);
+    lastRunKey.current = { roiKey, tab };
     const t = window.setTimeout(() => {
       const latest = useStore.getState().docs[id];
       if (!latest || latest.status !== 'ready') return;
-      void analyze(tab, tab === 'histogram' ? { bins: 1024 } : undefined);
-    }, 350);
+      if (tab === 'diff') void analyze('diff');
+      else void analyze(tab);
+    }, immediate ? 0 : 300);
     return () => window.clearTimeout(t);
-  }, [collapsed, doc?.id, doc?.status, doc?.generation, tab, analysisStage, autoKey]);
+  }, [collapsed, doc?.id, doc?.status, doc?.generation, tab, analysisStage, autoKey, roiKey, requiresRoi]);
 
   if (!doc) return null;
 
-  const selectTab = (next: AnalysisKind) => {
+  const selectTab = (next: AnalysisTab) => {
     setTab(next);
     setCollapsed(false);
+    const nextRequiresRoi = next === 'snr' || next === 'mtf' || next === 'noise' || next === 'diff';
+    if (nextRequiresRoi && !doc.roi) clearAnalysis(doc.id, next);
+    if (!nextRequiresRoi && tool === 'roi') setTool('pan');
   };
   const run = () => {
     setCollapsed(false);
     if (tab === 'colorchecker') fitColorChecker();
+    else if (requiresRoi && !doc.roi) setTool('roi');
     else if (tab === 'diff') analyze('diff');
-    else {
-      setRoiKind(tab);
-      if (tab === 'snr' || tab === 'mtf' || tab === 'noise') {
-        if (!doc.rois[tab]) { setTool('roi'); return; }
-      }
-      analyze(tab, tab === 'histogram' ? { bins: 1024 } : undefined);
-    }
+    else analyze(tab);
   };
-  const result = doc.analysis[tab];
+  const result = tab === 'diff' ? doc.analysis.diff : doc.analysis[tab];
+  const roi = doc.roi;
   return (
     <div className={`analysis-dock flex flex-col border-t border-ink-700 bg-ink-900 ${collapsed ? 'is-collapsed' : ''}`}>
       <div className="analysis-toolbar flex items-center border-b border-ink-700/70">
         <div className="analysis-tabs flex min-w-0 flex-1 items-center overflow-x-auto px-2 scroll-thin">
           {TABS.map((t) => (
-            <button key={t.id} data-testid={`analysis-tab-${t.id}`} className={`tab ${tab === t.id ? 'tab-active' : ''}`} onClick={() => selectTab(t.id as AnalysisKind)}>{t.label}</button>
+            <button key={t.id} data-testid={`analysis-tab-${t.id}`} className={`tab ${tab === t.id ? 'tab-active' : ''}`} onClick={() => selectTab(t.id)}>{t.label}</button>
           ))}
         </div>
         <div className="analysis-controls flex shrink-0 items-center gap-2 px-2">
@@ -374,7 +455,7 @@ export function AnalysisDock() {
             <option value="sharpen">最终</option>
           </select>
           {analysisBusy ? <span className="flex items-center gap-1 text-[11px] text-ink-400" data-testid="analysis-busy"><span className="spin" />计算中</span> : null}
-          <Button className="btn-xs" variant="primary" onClick={run} testId="analysis-run">{tab === 'colorchecker' ? '拟合' : tab === 'diff' ? '差异' : result ? '重算' : '运行'}</Button>
+          <Button className="btn-xs" variant="primary" onClick={run} testId="analysis-run">{tab === 'colorchecker' ? '拟合' : tab === 'diff' ? '差异' : requiresRoi && !roi ? '框选 ROI' : result ? '重算' : '运行'}</Button>
         </div>
         <button
           className="analysis-collapse"
@@ -388,12 +469,57 @@ export function AnalysisDock() {
       </div>
       {!collapsed ? (
         <div className="analysis-content min-h-0 flex-1 overflow-auto p-3 scroll-thin">
-          {tab === 'histogram' ? (result?.kind === 'histogram' ? <HistogramView result={result} /> : <Empty text="运行直方图：RGB + 亮度、线性/对数、剪切计数。" />) : null}
-          {tab === 'waveform' ? (result?.kind === 'waveform' ? <WaveformView result={result} /> : <Empty text="运行波形：亮度波形 / RGB parade。" />) : null}
-          {tab === 'snr' ? (result?.kind === 'snr' ? <SnrView result={result} /> : <Empty text="在平坦区域框选 ROI，逐通道计算 mean/std 与 SNR dB。" />) : null}
-          {tab === 'mtf' ? (result?.kind === 'mtf' ? <MtfView result={result} /> : <Empty text="框选斜边 ROI，计算 ISO 12233 MTF50/MTF10。" />) : null}
-          {tab === 'colorchecker' ? (result?.kind === 'colorchecker' ? <ColorCheckerView result={result} /> : <Empty text="在画布上依次点选色卡四角（TL/TR/BR/BL），然后拟合 CCM。" />) : null}
-          {tab === 'noise' ? (result?.kind === 'noise' ? <SpectrumView result={result} /> : <Empty text="框选平坦 ROI，计算 2D FFT 噪声功率谱、径向平均与 1D PSD。" />) : null}
+          {tab !== 'colorchecker' ? (
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-ink-400" data-testid="analysis-range">
+              <span className="field-label">分析范围</span>
+              {requiresRoi ? (
+                <Button
+                  className="btn-xs"
+                  variant={tool === 'roi' ? 'primary' : 'ghost'}
+                  onClick={() => setTool(tool === 'roi' ? 'pan' : 'roi')}
+                  title="点击开始/结束持续框选"
+                >
+                  框选
+                </Button>
+              ) : (
+                <Segmented
+                  value={roi ? 'roi' : 'full'}
+                  onChange={(v) => {
+                    if (v === 'full') {
+                      setRoi(doc.id, null);
+                      setTool('pan');
+                      clearAnalysis(doc.id, 'snr');
+                      clearAnalysis(doc.id, 'mtf');
+                      clearAnalysis(doc.id, 'noise');
+                      clearAnalysis(doc.id, 'diff');
+                    } else {
+                      setTool('roi');
+                    }
+                  }}
+                  options={[{ value: 'full', label: '全图' }, { value: 'roi', label: '框选' }]}
+                />
+              )}
+              {roi ? (
+                <span className="mono">{Math.round(roi.w)}×{Math.round(roi.h)} @ {roi.x},{roi.y}</span>
+              ) : requiresRoi ? (
+                <span className="text-[#ffca7a]">尚未框选</span>
+              ) : (
+                <span>整幅图像</span>
+              )}
+              {tool === 'roi' ? <span className="text-[#a8d2ff]">在画布上拖拽框选</span> : null}
+            </div>
+          ) : null}
+          {result?.warnings?.length ? (
+            <div className="mb-2 rounded border border-[#5c4a24] bg-[#332713] px-2 py-1 text-[11px] leading-4 text-[#ffca7a]" data-testid="analysis-warnings">
+              {result.warnings.join(' · ')}
+            </div>
+          ) : null}
+          {tab === 'histogram' ? (result?.kind === 'histogram' ? <HistogramView result={result} /> : <Empty text="直方图：RGB + 亮度、线性/对数、剪切计数。" />) : null}
+          {tab === 'waveform' ? (result?.kind === 'waveform' ? <WaveformView result={result} /> : <Empty text="波形：亮度波形 / RGB parade；默认全图，可框选限制范围。" />) : null}
+          {tab === 'snr' ? (result?.kind === 'snr' ? <SnrView result={result} /> : <Empty text="请先框选 ROI：选择“框选”后在画布上拖拽平坦区域，再计算 mean/std 与 SNR dB。" />) : null}
+          {tab === 'mtf' ? (result?.kind === 'mtf' ? <MtfView result={result} /> : <Empty text="请先框选 ROI：在画布上拖拽包含清晰斜边的区域，再计算 ISO 12233 MTF50/MTF10。" />) : null}
+          {tab === 'colorchecker' ? <ColorCheckerView result={result?.kind === 'colorchecker' ? result : null} /> : null}
+          {tab === 'noise' ? (result?.kind === 'noise' ? <SpectrumView result={result} /> : <Empty text="请先框选 ROI：在画布上拖拽平坦区域，再计算 2D FFT 噪声功率谱（最多采样 1024×1024）。" />) : null}
           {tab === 'diff' ? <DiffView /> : null}
         </div>
       ) : null}

@@ -1,5 +1,5 @@
 import type { ColorCheckerPatchResult, Mat3 } from '../types';
-import { ccmFromTotal, inverse3, isMat3, mul3Vec } from './matrices';
+import { ccmFromTotal, inverse3, isMat3, mul3Vec, transpose3 } from './matrices';
 import { deltaE00Parts, linearSrgbToLab, type Lab } from './lab';
 import type { ColorCheckerPatch } from './colorchecker-data';
 
@@ -189,7 +189,10 @@ export function fitCcm(input: CcmFitInput): CcmFitResult {
   const B = idx.map((i) => input.referenceSrgb[i].map((v) => (v > 1 ? v / 255 : v)) as [number, number, number]);
   // referenceSrgb is expected in 0..1 *linear* sRGB. If callers pass 0..255,
   // convert only values > 1 above; srgb decode is the caller's responsibility.
-  const lsRaw = normalEquations(A, B);
+  // Samples are stored as rows (camera_i, reference_i), so the normal
+  // equations solve A * X = B and produce X^T. Transpose back to a matrix that
+  // can be applied as mul3Vec(chosen, camera).
+  const lsRaw = transpose3(normalEquations(A, B));
   const ls = normalizeRowsStrict(lsRaw);
   const refLab = idx.map((_, j) => {
     const [r, g, b] = B[j];

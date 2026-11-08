@@ -116,6 +116,7 @@ export default function App() {
         useStore.getState().setShowImport(false);
         useStore.getState().setShowExport(false);
         useStore.getState().setShowChangelog(false);
+        if (useStore.getState().tool === 'roi') useStore.getState().setTool('pan');
         setToast(null);
       }
       if (!doc) return;

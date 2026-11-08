@@ -28,6 +28,17 @@ describe('analysis', () => {
     expect(h.mean).toBeCloseTo(0.5, 5);
   });
 
+  it('reports R/G/B means and green-normalized ratios for the analysed area', () => {
+    const data = rgba(8, 8, () => [0.5, 0.25, 0.1, 1]);
+    const h = computeHistogram({ width: 8, height: 8, data, bins: 256, domain: 'display-srgb' });
+    expect(h.channelMeans[0]).toBeCloseTo(0.5, 6);
+    expect(h.channelMeans[1]).toBeCloseTo(0.25, 6);
+    expect(h.channelMeans[2]).toBeCloseTo(0.1, 6);
+    expect(h.channelRatios[0]).toBeCloseTo(2, 6);
+    expect(h.channelRatios[1]).toBe(1);
+    expect(h.channelRatios[2]).toBeCloseTo(0.4, 6);
+  });
+
   it('SNR matches synthetic Gaussian noise within 0.2 dB', () => {
     let seed = 12345;
     const rand = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 0x100000000; };

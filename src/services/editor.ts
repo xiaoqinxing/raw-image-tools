@@ -24,6 +24,14 @@ import { idbGet, idbGetAll, idbPut, idbDelete } from '../lib/idb';
 const sessions = new Map<string, ImageSession>();
 /** Last posted preview request per document; identical requests are coalesced. */
 const lastRenderSig = new Map<string, string>();
+/** Monotonic request id per document+analysis, so stale results cannot win. */
+const analysisSeq = new Map<string, number>();
+
+/** Older projects stored one ROI per analysis; collapse them to the shared ROI. */
+function legacyRoi(rois?: Partial<Record<AnalysisKind, Rect>>): Rect | null {
+  if (!rois) return null;
+  return rois.snr ?? rois.mtf ?? rois.noise ?? null;
+}
 
 function clearRenderSig(id: string): void {
   lastRenderSig.delete(id);
@@ -144,7 +152,7 @@ function makeDoc(raw: RawImage, decodeMs: number, flat: FlatField | null = null)
     stats: null,
     analysis: {},
     probes: [],
-    rois: {},
+    roi: null,
     view: {
       zoom: 1,
       panX: meta.geometry.active.w / 2,
@@ -453,9 +461,10 @@ export async function analyze(kind: AnalysisKind, options?: Record<string, unkno
   const session = sessions.get(doc.id);
   if (!session) return;
   const stage = state.analysisStage;
-  const roi = kind === 'histogram' || kind === 'waveform' || kind === 'colorchecker'
-    ? null
-    : doc.rois[kind] ?? null;
+  const roi = kind === 'colorchecker' ? null : doc.roi ?? null;
+  const seqKey = `${doc.id}:${kind}`;
+  const seq = (analysisSeq.get(seqKey) ?? 0) + 1;
+  analysisSeq.set(seqKey, seq);
   state.setAnalysisBusy(true);
   try {
     let extra = options ?? {};
@@ -472,9 +481,11 @@ export async function analyze(kind: AnalysisKind, options?: Record<string, unkno
       ...extra,
       bins: 1024,
     });
+    if (analysisSeq.get(seqKey) !== seq) return;
     state.setAnalysis(doc.id, result);
     state.setAnalysisBusy(false);
   } catch (e) {
+    if (analysisSeq.get(seqKey) !== seq) return;
     state.setAnalysisBusy(false);
     toast(e instanceof Error ? e.message : String(e));
   }
@@ -674,7 +685,7 @@ export function buildProject(): ProjectFile {
       params: d.params,
       snapshots: d.snapshots,
       colorChecker: d.colorChecker,
-      rois: d.rois,
+      roi: d.roi,
       probes: d.probes,
       flat: d.flat ? flatRef(d.flat) : undefined,
     };
@@ -703,7 +714,7 @@ export function buildProject(): ProjectFile {
     },
     analysis: {
       stage: state.analysisStage,
-      rois: active?.rois ?? {},
+      roi: active?.roi ?? null,
       probes: active?.probes ?? [],
     },
     ui: { previewLongEdge: 2048, showClipping: state.showClipping, theme: 'dark' },
@@ -773,7 +784,7 @@ export async function relinkProjectImage(projectImage: ProjectImage, file: File,
   doc.params = structuredClone(projectImage.params);
   doc.snapshots = structuredClone(projectImage.snapshots ?? []);
   doc.colorChecker = structuredClone(projectImage.colorChecker ?? { corners: null, referenceId: 'classic24-pre2014-d65' });
-  doc.rois = structuredClone(projectImage.rois ?? {});
+  doc.roi = projectImage.roi ?? legacyRoi(projectImage.rois);
   doc.probes = structuredClone(projectImage.probes ?? []);
   if (projectImage.flat) doc.flat = flat ? stripFlat(flat) : null;
   if (flat) {
@@ -804,6 +815,11 @@ export function finishProjectRelink(): void {
   }
   state.setAnalysisStage(project.analysis.stage ?? 'sharpen');
   state.setSelectedStage(project.analysis.stage ?? 'sharpen');
+  const activeId = project.view?.activeImageId ?? state.activeId;
+  if (activeId && state.docs[activeId]) {
+    const savedRoi = project.analysis.roi ?? legacyRoi(project.analysis.rois);
+    if (savedRoi && !state.docs[activeId].roi) state.setRoi(activeId, savedRoi);
+  }
   state.setSplit(project.view?.split ?? 0.5);
   state.setShowClipping(project.ui?.showClipping ?? false);
   if (project.layout?.mode && project.layout.mode !== 'single') {
@@ -858,6 +874,9 @@ export async function removeDoc(id: string): Promise<void> {
     sessions.delete(id);
   }
   clearRenderSig(id);
+  for (const key of [...analysisSeq.keys()]) {
+    if (key.startsWith(`${id}:`)) analysisSeq.delete(key);
+  }
   useStore.getState().removeDoc(id);
 }
 
