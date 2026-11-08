@@ -348,7 +348,7 @@ export function CanvasStage() {
         <Button variant={tool === 'probe' ? 'primary' : 'ghost'} onClick={() => setTool(tool === 'probe' ? 'pan' : 'probe')}>探针</Button>
         <Button variant={tool === 'colorchecker' ? 'primary' : 'ghost'} onClick={() => setTool(tool === 'colorchecker' ? 'pan' : 'colorchecker')}>色卡四角</Button>
         <Button variant={tool === 'crop' ? 'primary' : 'ghost'} onClick={() => setTool(tool === 'crop' ? 'pan' : 'crop')}>裁剪</Button>
-        <div className="ml-auto flex items-center gap-2 text-[10px] text-ink-400">
+        <div className="ml-auto flex items-center gap-2 text-[11px] text-ink-400">
           <span className="mono">{Math.round(doc.view.zoom * 100)}%</span>
           <span className="badge">{doc.stage}</span>
           {doc.stats ? <span className="mono">{doc.stats.timings.totalMs.toFixed(0)}ms</span> : null}
@@ -373,57 +373,57 @@ export function CanvasStage() {
         <svg className="overlay-svg">
           {ccCss ? (
             <g>
-              <polygon points={ccCss.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#f0a742" strokeWidth={1.5} />
-              {ccGrid.map(([a, b], i) => <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#f0a742" strokeOpacity={0.55} strokeWidth={0.7} />)}
-              {ccCss.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={3} fill="#f0a742" />)}
+              <polygon points={ccCss.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#ffb85c" strokeWidth={1.5} />
+              {ccGrid.map(([a, b], i) => <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#ffb85c" strokeOpacity={0.55} strokeWidth={0.7} />)}
+              {ccCss.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={3} fill="#ffb85c" />)}
             </g>
           ) : null}
           {roiCss ? (
             <g>
-              <rect x={roiCss.x} y={roiCss.y} width={roiCss.w} height={roiCss.h} fill="none" stroke="#4ea1ff" strokeWidth={1.2} strokeDasharray="4 3" />
-              <text x={roiCss.x + 4} y={roiCss.y - 4} fill="#9cc7f5" fontSize={10} fontFamily="monospace">{roiKind.toUpperCase()} ROI</text>
+              <rect x={roiCss.x} y={roiCss.y} width={roiCss.w} height={roiCss.h} fill="none" stroke="#5cb0ff" strokeWidth={1.2} strokeDasharray="4 3" />
+              <text x={roiCss.x + 4} y={roiCss.y - 4} fill="#a8d2ff" fontSize={10} fontFamily="monospace">{roiKind.toUpperCase()} ROI</text>
             </g>
           ) : null}
           {drag && drag.mode !== 'pan' ? (() => {
             const a = imageToCss(doc, viewport, drag.start.x, drag.start.y);
             const b = imageToCss(doc, viewport, drag.current.x, drag.current.y);
-            return <rect x={Math.min(a.x, b.x)} y={Math.min(a.y, b.y)} width={Math.abs(b.x - a.x)} height={Math.abs(b.y - a.y)} fill={drag.mode === 'crop' ? 'rgba(78,161,255,0.08)' : 'rgba(78,161,255,0.12)'} stroke="#4ea1ff" strokeWidth={1.2} />;
+            return <rect x={Math.min(a.x, b.x)} y={Math.min(a.y, b.y)} width={Math.abs(b.x - a.x)} height={Math.abs(b.y - a.y)} fill={drag.mode === 'crop' ? 'rgba(92,176,255,0.08)' : 'rgba(92,176,255,0.12)'} stroke="#5cb0ff" strokeWidth={1.2} />;
           })() : null}
           {cropCss ? (
-            <rect x={cropCss.x} y={cropCss.y} width={cropCss.w} height={cropCss.h} fill="none" stroke="#59c98a" strokeWidth={1.2} />
+            <rect x={cropCss.x} y={cropCss.y} width={cropCss.w} height={cropCss.h} fill="none" stroke="#5fd99a" strokeWidth={1.2} />
           ) : null}
           {doc.probes.map((p, i) => {
             const q = imageToCss(doc, viewport, p.x, p.y);
             return (
               <g key={p.id}>
-                <circle cx={q.x} cy={q.y} r={6} fill="none" stroke="#f0a742" strokeWidth={1.2} />
-                <line x1={q.x - 9} y1={q.y} x2={q.x + 9} y2={q.y} stroke="#f0a742" strokeWidth={0.8} />
-                <line x1={q.x} y1={q.y - 9} x2={q.x} y2={q.y + 9} stroke="#f0a742" strokeWidth={0.8} />
-                <text x={q.x + 9} y={q.y - 7} fill="#f0a742" fontSize={10} fontFamily="monospace">P{i + 1}</text>
+                <circle cx={q.x} cy={q.y} r={6} fill="none" stroke="#ffb85c" strokeWidth={1.2} />
+                <line x1={q.x - 9} y1={q.y} x2={q.x + 9} y2={q.y} stroke="#ffb85c" strokeWidth={0.8} />
+                <line x1={q.x} y1={q.y - 9} x2={q.x} y2={q.y + 9} stroke="#ffb85c" strokeWidth={0.8} />
+                <text x={q.x + 9} y={q.y - 7} fill="#ffb85c" fontSize={10} fontFamily="monospace">P{i + 1}</text>
               </g>
             );
           })}
           {abMode !== 'off' || diffMode ? (
             <g>
               <line x1={split * viewport.width} y1={0} x2={split * viewport.width} y2={viewport.height} stroke="#ffffff" strokeOpacity={0.5} strokeWidth={1} />
-              <rect x={split * viewport.width - 10} y={0} width={20} height={18} rx={3} fill="#1b2229" stroke="#3c4854" />
-              <text x={split * viewport.width} y={12} textAnchor="middle" fill="#c2ccd4" fontSize={9} fontFamily="monospace">↔</text>
+              <rect x={split * viewport.width - 10} y={0} width={20} height={18} rx={3} fill="#252d35" stroke="#5a6a78" />
+              <text x={split * viewport.width} y={12} textAnchor="middle" fill="#d5dde5" fontSize={10} fontFamily="monospace">↔</text>
             </g>
           ) : null}
         </svg>
-        <div className="canvas-hint pointer-events-none absolute bottom-2 left-2 rounded bg-black/45 px-2 py-1 text-[10px] text-ink-300">
+        <div className="canvas-hint pointer-events-none absolute bottom-2 left-2 rounded bg-black/45 px-2 py-1 text-[11px] text-ink-300">
           <span className="hidden sm:inline">{tool === 'pan' ? '拖拽平移 · 滚轮缩放 · 双击适配' : tool === 'roi' ? '拖拽框选分析 ROI' : tool === 'probe' ? '点击添加探针' : tool === 'gray' ? '点击灰点（平场校正后 RAW）' : tool === 'colorchecker' ? '依次点击色卡四角（TL/TR/BR/BL）' : '拖拽设置输出裁剪'}</span>
           <span className="sm:hidden">{tool === 'pan' ? '拖拽平移 · 双击适配' : tool === 'roi' ? '拖拽框选 ROI' : tool === 'probe' ? '点击添加探针' : tool === 'gray' ? '点击灰点' : tool === 'colorchecker' ? '点选色卡四角' : '拖拽裁剪'}</span>
         </div>
-        <div className="pointer-events-none absolute left-2 top-2 max-w-[70%] truncate rounded bg-black/50 px-2 py-1 text-[10px] text-ink-300 sm:hidden">
+        <div className="pointer-events-none absolute left-2 top-2 max-w-[70%] truncate rounded bg-black/50 px-2 py-1 text-[11px] text-ink-300 sm:hidden">
           {doc.fileName} · {doc.meta.geometry.active.w}×{doc.meta.geometry.active.h}
         </div>
         {showClipping ? (
-          <div className="pointer-events-none absolute right-2 top-2 rounded bg-black/55 px-2 py-1 text-[10px] text-[#ff8e8e]">
+          <div className="pointer-events-none absolute right-2 top-2 rounded bg-black/55 px-2 py-1 text-[11px] text-[#ff9a9a]">
             剪切：高光 ≥ 1.0 · 阴影 ≤ 0
           </div>
         ) : null}
-        {doc.status === 'error' ? <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-[12px] text-[#ff8e8e]">{doc.error}</div> : null}
+        {doc.status === 'error' ? <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-[12px] text-[#ff9a9a]">{doc.error}</div> : null}
       </div>
     </div>
   );

@@ -48,7 +48,7 @@ export function ExportDialog() {
                 <option key={stage} value={stage}>{STAGE_LABELS[stage]}{stage === 'sharpen' ? ' / 最终' : ''}</option>
               ))}
             </select>
-            <div className="mt-1 text-[10px] text-ink-500">可导出任意中间阶段；RAW 阶段以 CFA 灰度显示。</div>
+            <div className="mt-1 text-[11px] text-ink-500">可导出任意中间阶段；RAW 阶段以 CFA 灰度显示。</div>
           </div>
           <div>
             <div className="field-label mb-1">位深</div>
@@ -56,9 +56,9 @@ export function ExportDialog() {
               <Button variant={bitDepth === 8 ? 'primary' : 'default'} onClick={() => setBitDepth(8)}>8-bit sRGB（默认）</Button>
               <Button variant={bitDepth === 16 ? 'primary' : 'default'} onClick={() => setBitDepth(16)}>16-bit PNG</Button>
             </div>
-            <div className="mt-2 text-[10px] leading-4 text-ink-500">16-bit 使用当前 display-sRGB 值量化到 0..65535；不写 ICC，仅写 sRGB 相关信息。全分辨率导出会按需渲染。</div>
+            <div className="mt-2 text-[11px] leading-4 text-ink-500">16-bit 使用当前 display-sRGB 值量化到 0..65535；不写 ICC，仅写 sRGB 相关信息。全分辨率导出会按需渲染。</div>
             {willScale ? (
-              <div className="mt-2 rounded border border-[#5a441f] bg-[#2b2113] p-2 text-[10px] leading-4 text-[#f3bf6d]">
+              <div className="mt-2 rounded border border-[#5c4a24] bg-[#332713] p-2 text-[11px] leading-4 text-[#ffca7a]">
                 当前裁剪约 {(w * h / 1e6).toFixed(1)}MP，超过 48MP 原生上限；导出会使用约 12MP 的全分辨率纹理并放大/降采样，原生 100MP 分块导出尚未实现。
               </div>
             ) : null}

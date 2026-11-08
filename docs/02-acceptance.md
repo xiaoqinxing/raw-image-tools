@@ -13,7 +13,7 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 
 | 套件 | 数量 | 结果 |
 |------|------|------|
-| Vitest 单元/数值 | 75 | 全部通过 |
+| Vitest 单元/数值 | 80 | 全部通过 |
 | Playwright E2E：DNG 导入 / 阶段 / 16-bit 导出 / 工程保存 | 1 | 通过 |
 | Playwright E2E：裸 RAW 导入 + 错误配置 | 1 | 通过 |
 | Playwright E2E：ColorChecker 四角 + CCM 拟合 | 1 | 通过 |
@@ -38,6 +38,7 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 - 分析：直方图、SNR（高斯噪声 <0.2 dB）、MTF50（高斯模糊斜边误差 <5%）、白噪声频谱平坦度、CCM 最小二乘恢复（mean ΔE00 < 1）。
 - ColorChecker：合成色卡 mean ΔE00 ≈ 0.01，max ≈ 0.03。
 - 构建信息：版本号 = package major.minor + Git 提交数；git log 解析与异常行过滤。
+- 主题调色板：`src/styles.css` 的 CSS 变量与 `src/ui/palette.ts` 保持一致；所有文字色对 `ink-950/900/850/800` 的对比度 ≥ 4.5:1，主文字 ≥ 12:1；组件中不允许出现低对比 `text-ink-*`。
 
 ## 性能实测
 

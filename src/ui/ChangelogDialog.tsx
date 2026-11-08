@@ -17,16 +17,16 @@ export function ChangelogDialog() {
           <div className="flex h-10 shrink-0 items-center justify-between border-b border-ink-700 px-4">
             <div>
               <Dialog.Title className="text-[13px] text-ink-100">更新日志</Dialog.Title>
-              <div className="text-[9px] text-ink-500">版本号与提交记录由构建自动生成</div>
+              <div className="text-[10px] text-ink-500">版本号与提交记录由构建自动生成</div>
             </div>
             <button className="text-ink-400 hover:text-white" onClick={() => setOpen(false)} aria-label="关闭更新日志">✕</button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-ink-700 px-4 py-2.5 text-[10px] text-ink-500">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-ink-700 px-4 py-2.5 text-[11px] text-ink-500">
             <span className="badge badge-ok mono">v{version}</span>
             {shortCommit ? (
               commitUrl(commit) ? (
-                <a className="mono text-[#9cc7f5] hover:text-white" href={commitUrl(commit)} target="_blank" rel="noreferrer" title={commit}>{shortCommit}</a>
+                <a className="mono text-[#a8d2ff] hover:text-white" href={commitUrl(commit)} target="_blank" rel="noreferrer" title={commit}>{shortCommit}</a>
               ) : <span className="mono text-ink-300">{shortCommit}</span>
             ) : <span>无 Git 元数据</span>}
             {date ? <span className="mono">{date}</span> : null}
@@ -43,11 +43,11 @@ export function ChangelogDialog() {
                   data-testid="changelog-entry"
                   className="flex items-baseline gap-2 rounded px-2 py-1.5 text-[11px] hover:bg-ink-850"
                 >
-                  <span className="mono w-[68px] shrink-0 text-[9px] text-ink-500">{entry.date}</span>
+                  <span className="mono w-[68px] shrink-0 text-[10px] text-ink-500">{entry.date}</span>
                   {url ? (
-                    <a className="mono shrink-0 text-[9px] text-[#9cc7f5] hover:text-white" href={url} target="_blank" rel="noreferrer" title={entry.sha}>{entry.short}</a>
+                    <a className="mono shrink-0 text-[10px] text-[#a8d2ff] hover:text-white" href={url} target="_blank" rel="noreferrer" title={entry.sha}>{entry.short}</a>
                   ) : (
-                    <span className="mono shrink-0 text-[9px] text-ink-500">{entry.short}</span>
+                    <span className="mono shrink-0 text-[10px] text-ink-500">{entry.short}</span>
                   )}
                   <span className="min-w-0 flex-1 leading-4 text-ink-200">{entry.subject}</span>
                   {index === 0 ? <span className="badge badge-ok shrink-0">当前</span> : null}
@@ -60,7 +60,7 @@ export function ChangelogDialog() {
             )}
           </div>
 
-          <div className="border-t border-ink-700 px-4 py-2 text-[9px] leading-4 text-ink-500">
+          <div className="border-t border-ink-700 px-4 py-2 text-[10px] leading-4 text-ink-500">
             版本号 = package.json 的 major.minor + Git 提交数；更新日志来自 <span className="mono">git log</span>，不需要手动维护。
           </div>
         </Dialog.Content>

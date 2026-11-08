@@ -39,6 +39,7 @@ src/workers/     decode.worker / render.worker
 src/services/    editor 编排、session、项目、benchmark
 src/state/       Zustand store
 src/ui/          工作台 UI；ChangelogDialog.tsx 为更新日志弹窗
+src/ui/palette.ts 调色板唯一来源（tailwind.config.js 与 styles.css 变量由此派生）
 tests/unit/      Vitest 数值测试
 tests/e2e/       Playwright E2E
 tests/fixtures/  合成 RAW / DNG 测试数据
@@ -95,7 +96,7 @@ npm run build
 
 ## UI 约定
 
-- 深色工作台风格，颜色使用 `ink` 调色板和 `styles.css` 中的 CSS 变量。
+- 深色工作台风格，基础色统一取 `src/ui/palette.ts`（`tailwind.config.js` 与 `styles.css` 的 CSS 变量都从它派生）。文字色对所在表面的对比度必须 ≥ 4.5:1，由 `tests/unit/theme.test.ts` 守护；新增颜色优先复用 `ink` 与语义 token，不要引入与调色板无关的裸色值。
 - 新面板先保证桌面三栏布局，再验证 1200px、1024px、768px、390px 和横屏。
 - 不引入重型 UI 框架；优先复用 `src/ui/controls.tsx` 的 Button / Slider / Segmented / Section。
 - 主要按钮保持中文短标签；技术名词可保留英文（RAW、CFA、MHC、AHD、CCM、CSC、SNR、MTF）。

@@ -133,7 +133,7 @@ export function NumberField({
           disabled={disabled}
           onChange={(e) => onChange(Number(e.target.value))}
         />
-        {suffix ? <span className="text-[10px] text-ink-400">{suffix}</span> : null}
+        {suffix ? <span className="text-[11px] text-ink-400">{suffix}</span> : null}
       </div>
     </label>
   );
@@ -155,7 +155,7 @@ export function Section({
     <div className="border-b border-ink-700/70">
       <div className="flex h-8 items-center justify-between px-3">
         <button className="flex items-center gap-2 text-left" onClick={() => setOpen(!open)}>
-          <span className={`text-ink-400 text-[9px] transition-transform ${open ? 'rotate-90' : ''}`}>▶</span>
+          <span className={`text-ink-400 text-[10px] transition-transform ${open ? 'rotate-90' : ''}`}>▶</span>
           <span className="text-[11px] font-medium tracking-wide text-ink-200">{title}</span>
         </button>
         {right}
@@ -189,7 +189,7 @@ export function Segmented<T extends string>({
         <button
           key={o.value}
           type="button"
-          className={`px-2 py-1 text-[11px] ${value === o.value ? 'bg-[#1c3a54] text-[#cfe7ff]' : 'bg-ink-850 text-ink-300 hover:bg-ink-800'}`}
+          className={`px-2 py-1 text-[11px] ${value === o.value ? 'bg-[#1d4a70] text-[#d8ecff]' : 'bg-ink-850 text-ink-300 hover:bg-ink-800'}`}
           onClick={() => onChange(o.value)}
         >
           {o.label}

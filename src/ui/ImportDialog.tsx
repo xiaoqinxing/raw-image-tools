@@ -102,7 +102,7 @@ export function ImportDialog() {
           <button className={`tab ${tab === 'bare' ? 'tab-active' : ''}`} onClick={() => setTab('bare')}>裸 RAW 二进制</button>
         </div>
         <div className="space-y-4 p-3 sm:p-4">
-          <label className={`dropzone flex cursor-pointer flex-col items-center justify-center gap-1 py-6 ${file ? 'border-[#2e6ea8]' : ''}`}>
+          <label className={`dropzone flex cursor-pointer flex-col items-center justify-center gap-1 py-6 ${file ? 'border-[#3a7fbd]' : ''}`}>
             <input type="file" accept={tab === 'dng' ? '.dng' : '.raw,.bin,.dat,.mipi'} className="hidden" onChange={(e) => {
               const f = e.target.files?.[0] ?? null;
               setFile(f);
@@ -111,7 +111,7 @@ export function ImportDialog() {
               }
             }} />
             <div className="text-[12px] text-ink-200">{file ? file.name : '点击选择文件'}</div>
-            <div className="text-[10px] text-ink-500">{file ? `${(file.size / 1048576).toFixed(2)} MB` : tab === 'dng' ? 'DNG（LibRaw WASM 解码）' : 'headerless CFA 二进制'}</div>
+            <div className="text-[11px] text-ink-500">{file ? `${(file.size / 1048576).toFixed(2)} MB` : tab === 'dng' ? 'DNG（LibRaw WASM 解码）' : 'headerless CFA 二进制'}</div>
           </label>
 
           {tab === 'dng' ? (
@@ -157,28 +157,28 @@ export function ImportDialog() {
                   <div className="grid grid-cols-2 gap-3">
                     {(['R', 'G1', 'G2', 'B'] as const).map((n, i) => (
                       <div key={n} className="flex items-center gap-1">
-                        <span className="w-5 text-[9px] text-ink-500">{n}</span>
-                        <input className="input input-mono h-[22px] text-[10px]" type="number" value={blackCfa[i]} onChange={(e) => { const v = [...blackCfa] as Vec4; v[i] = Number(e.target.value); setBlackCfa(v); }} />
-                        <input className="input input-mono h-[22px] text-[10px]" type="number" value={whiteCfa[i]} onChange={(e) => { const v = [...whiteCfa] as Vec4; v[i] = Number(e.target.value); setWhiteCfa(v); }} />
+                        <span className="w-5 text-[10px] text-ink-500">{n}</span>
+                        <input className="input input-mono h-[22px] text-[11px]" type="number" value={blackCfa[i]} onChange={(e) => { const v = [...blackCfa] as Vec4; v[i] = Number(e.target.value); setBlackCfa(v); }} />
+                        <input className="input input-mono h-[22px] text-[11px]" type="number" value={whiteCfa[i]} onChange={(e) => { const v = [...whiteCfa] as Vec4; v[i] = Number(e.target.value); setWhiteCfa(v); }} />
                       </div>
                     ))}
                   </div>
                 )}
               </div>
               {estimate ? (
-                <div className="grid grid-cols-1 gap-2 text-[10px] sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-3">
                   <div className="rounded bg-ink-850 p-2"><div className="text-ink-500">每行字节</div><div className="mono">{estimate.rowBytes}</div></div>
                   <div className="rounded bg-ink-850 p-2"><div className="text-ink-500">实际 stride</div><div className="mono">{estimate.stride}</div></div>
                   <div className="rounded bg-ink-850 p-2"><div className="text-ink-500">所需总字节</div><div className="mono">{estimate.required}{file ? ` / ${file.size}` : ''}</div></div>
                 </div>
               ) : null}
-              <div className="text-[10px] leading-4 text-ink-500">
+              <div className="text-[11px] leading-4 text-ink-500">
                 支持：8-bit unpacked；10/12/14/16-bit u16 LE/BE 右/左对齐；10/12/14-bit 连续 LSB/MSB；MIPI RAW10/12/14。错误配置会在解码时给出字节差、通道统计与建议。
               </div>
             </div>
           )}
 
-          {error ? <div className="rounded border border-[#5b2727] bg-[#2a1517] p-3 text-[11px] leading-5 text-[#ff9a9a]">{error}</div> : null}
+          {error ? <div className="rounded border border-[#63302f] bg-[#341a1e] p-3 text-[11px] leading-5 text-[#ff9a9a]">{error}</div> : null}
 
           <div className="flex items-center justify-end gap-2">
             <Button variant="ghost" onClick={() => setOpen(false)}>取消</Button>

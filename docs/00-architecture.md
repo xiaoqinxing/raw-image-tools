@@ -1261,8 +1261,8 @@ d = |a-b|\cdot g
 
 ### 12.2 视觉
 
-- 暗色专业风：背景 `#0b0d0f`，面板 `#12161a`，边框 `#232a31`，主文本 `#d7dde3`，次文本 `#8b98a5`，强调蓝 `#4ea1ff`，警告琥珀 `#f0a742`，错误红 `#ff5d5d`。
-- 12–13px 高密度；数字用等宽字体；滑杆 + 数值输入并排；单位清晰（DN、px、dB、cycles/px）。
+- 暗色专业风：背景 `#101418`，面板 `#171d23`，边框 `#2e3942`，主文本 `#e7edf3`，次文本 `#a7b4c0`，强调蓝 `#5cb0ff`，警告琥珀 `#ffb85c`，错误红 `#ff7373`。调色板唯一来源是 `src/ui/palette.ts`，`src/styles.css` 的 CSS 变量与之镜像；所有文字色在其渲染表面上的对比度 ≥ 4.5:1（主文本 ≥ 12:1），由 `tests/unit/theme.test.ts` 守护。
+- 12–13px 高密度，最小标签 10px；数字用等宽字体；滑杆 + 数值输入并排；单位清晰（DN、px、dB、cycles/px）。
 - 不做社交修图风；不放大圆角/阴影；信息优先。
 - Radix：Dialog、Tabs、Tooltip、Popover、Slider、Switch、DropdownMenu、ScrollArea。
 - 关键操作有快捷键：F 适配、1 1:1、B bypass 当前 stage、A/B 切换、Space 拖拽、`[`/`]` 切换 stage、P 加探针。

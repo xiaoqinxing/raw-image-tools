@@ -151,7 +151,7 @@ export function CompareView() {
             <button
               key={value}
               type="button"
-              className={`px-2 py-1 text-[10px] ${compareLayout === value ? 'bg-[#1c3a54] text-[#cfe7ff]' : 'bg-ink-850 text-ink-300 hover:bg-ink-800'}`}
+              className={`px-2 py-1 text-[11px] ${compareLayout === value ? 'bg-[#1d4a70] text-[#d8ecff]' : 'bg-ink-850 text-ink-300 hover:bg-ink-800'}`}
               onClick={() => setCompareLayout(value)}
             >
               {label}
@@ -168,7 +168,7 @@ export function CompareView() {
         >
           {STAGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-        <span className="compare-hint text-[10px] text-ink-500">{paneIds.length} / {slots} 图 · 滚轮缩放 · 拖拽平移 · 点击标题切换编辑对象</span>
+        <span className="compare-hint text-[11px] text-ink-500">{paneIds.length} / {slots} 图 · 滚轮缩放 · 拖拽平移 · 点击标题切换编辑对象</span>
         <div className="ml-auto flex gap-1">
           <Button className="btn-xs" onClick={() => { setActive(compareId); setCompareId(activeId); }}>交换 A/B</Button>
           <Button className="btn-xs" onClick={() => setCompareMode(false)}>退出对比</Button>
@@ -188,7 +188,7 @@ export function CompareView() {
           if (!d) return null;
           return (
             <div key={id} className="relative flex min-h-0 flex-col bg-ink-950">
-              <div className={`flex h-6 items-center gap-2 border-b border-ink-700/60 px-2 text-[10px] ${id === activeId ? 'bg-[#18222c]' : ''}`}>
+              <div className={`flex h-6 items-center gap-2 border-b border-ink-700/60 px-2 text-[11px] ${id === activeId ? 'bg-[#1d2a34]' : ''}`}>
                 <span className={`badge ${id === activeId ? 'badge-ok' : ''}`}>{String.fromCharCode(65 + idx)}</span>
                 <button className="min-w-0 truncate text-left text-ink-300 hover:text-white" onPointerDown={(e) => e.stopPropagation()}
                   onClick={() => activate(id)}
@@ -198,14 +198,14 @@ export function CompareView() {
                 <span className="ml-auto mono shrink-0 text-ink-500">{d.stage} · {d.source}</span>
               </div>
               <div ref={setHost(id)} className="canvas-host checker min-h-0 flex-1 overflow-hidden" />
-              <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-black/50 px-2 py-1 text-[9px] text-ink-300">
+              <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-black/50 px-2 py-1 text-[10px] text-ink-300">
                 {d.params.demosaic.algorithm.toUpperCase()} · {d.params.denoise.bypass ? 'DN off' : 'DN on'} · {d.params.ccm.source}
               </div>
             </div>
           );
         })}
         {Array.from({ length: Math.max(0, slots - paneIds.length) }).map((_, i) => (
-          <div key={`empty-${i}`} className="flex min-h-0 items-center justify-center bg-ink-950 text-[11px] text-ink-600">
+          <div key={`empty-${i}`} className="flex min-h-0 items-center justify-center bg-ink-950 text-[11px] text-ink-500">
             空位 · 在左侧选择图像以加入对比
           </div>
         ))}

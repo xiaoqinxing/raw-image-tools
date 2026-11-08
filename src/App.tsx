@@ -22,7 +22,7 @@ function StatusBar() {
   const viewport = useStore((s) => s.viewport);
   const setShowChangelog = useStore((s) => s.setShowChangelog);
   return (
-    <footer className="statusbar flex h-6 shrink-0 items-center gap-3 border-t border-ink-700 bg-ink-850 px-3 text-[10px] text-ink-500">
+    <footer className="statusbar flex h-6 shrink-0 items-center gap-3 border-t border-ink-700 bg-ink-850 px-3 text-[11px] text-ink-500">
       <span className="shrink-0">RAW Lab</span>
       <button
         type="button"

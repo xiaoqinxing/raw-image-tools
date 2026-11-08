@@ -35,9 +35,9 @@ function HistogramView({ result }: { result: HistogramResult }) {
       const ctx = c.getContext('2d')!;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = '#0d1115';
+      ctx.fillStyle = '#12171c';
       ctx.fillRect(0, 0, w, h);
-      ctx.strokeStyle = '#1f282f';
+      ctx.strokeStyle = '#2e3942';
       for (let i = 1; i < 4; i++) {
         const x = (w * i) / 4;
         ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
@@ -64,11 +64,11 @@ function HistogramView({ result }: { result: HistogramResult }) {
         }
         ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.stroke();
       };
-      drawSeries(result.channels.r, '#ff6b6b');
-      drawSeries(result.channels.g, '#59c98a');
-      drawSeries(result.channels.b, '#4ea1ff');
-      drawSeries(result.channels.y, '#c2ccd4');
-      ctx.fillStyle = '#6f7f8d'; ctx.font = '10px monospace';
+      drawSeries(result.channels.r, '#ff7b7b');
+      drawSeries(result.channels.g, '#5fd99a');
+      drawSeries(result.channels.b, '#5cb0ff');
+      drawSeries(result.channels.y, '#d5dde5');
+      ctx.fillStyle = '#94a3b0'; ctx.font = '11px monospace';
       ctx.fillText(`${result.min.toFixed(3)}`, 3, h - 3);
       ctx.fillText(`${result.max.toFixed(3)}`, w - 42, h - 3);
     };
@@ -80,7 +80,7 @@ function HistogramView({ result }: { result: HistogramResult }) {
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2 text-[10px] text-ink-400">
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink-400">
           <span className="mono">{result.bins} bins</span>
           <span>clip low {result.clipped.low.reduce((a, b) => a + b, 0)} / high {result.clipped.high.reduce((a, b) => a + b, 0)}</span>
           <span className="mono">mean {result.mean.toFixed(4)}</span>
@@ -109,14 +109,14 @@ function ProbeView({ result }: { result: ProbeResult }) {
   const doc = useActiveDoc();
   return (
     <div className="h-full overflow-auto scroll-thin">
-      <table className="w-full text-[10px]">
+      <table className="w-full text-[11px]">
         <thead className="text-ink-500">
           <tr className="text-left"><th className="py-1">探针</th><th>坐标</th><th>RAW</th><th>R</th><th>G</th><th>B</th><th>WB</th></tr>
         </thead>
         <tbody className="mono">
           {result.points.map((p, i) => (
             <tr key={p.id} className="border-t border-ink-700/60">
-              <td className="py-1 text-[#f0a742]">P{i + 1}</td>
+              <td className="py-1 text-[#ffb85c]">P{i + 1}</td>
               <td>{Math.round(p.x)},{Math.round(p.y)}</td>
               <td>{p.rawCfa.channel}={p.rawCfa.dn}</td>
               <td>{p.stageRgb[0].toFixed(4)}</td>
@@ -131,7 +131,7 @@ function ProbeView({ result }: { result: ProbeResult }) {
         <Button className="btn-xs" onClick={() => useStore.getState().setTool('probe')}>添加探针</Button>
         {doc?.probes.length ? <Button className="btn-xs" onClick={() => { doc.probes.forEach((p) => useStore.getState().removeProbe(doc.id, p.id)); }}>清空</Button> : null}
       </div>
-      <div className="mt-2 text-[10px] text-ink-500">探针值来自当前预览 stage 的 F16 纹理；RAW 值来自原始 U16 缓冲。</div>
+      <div className="mt-2 text-[11px] text-ink-500">探针值来自当前预览 stage 的 F16 纹理；RAW 值来自原始 U16 缓冲。</div>
     </div>
   );
 }
@@ -143,11 +143,11 @@ function SnrView({ result }: { result: SnrResult }) {
         <thead className="text-ink-500"><tr className="text-left"><th>通道</th><th>mean</th><th>std</th><th>SNR dB</th><th>样本</th></tr></thead>
         <tbody className="mono">
           {result.perChannel.map((c) => (
-            <tr key={c.channel} className="border-t border-ink-700/60"><td>{c.channel}</td><td>{c.mean.toFixed(5)}</td><td>{c.std.toFixed(5)}</td><td className="text-[#7ee2ad]">{c.snrDb.toFixed(2)}</td><td>{c.samples}</td></tr>
+            <tr key={c.channel} className="border-t border-ink-700/60"><td>{c.channel}</td><td>{c.mean.toFixed(5)}</td><td>{c.std.toFixed(5)}</td><td className="text-[#7fe3ae]">{c.snrDb.toFixed(2)}</td><td>{c.samples}</td></tr>
           ))}
         </tbody>
       </table>
-      <div className="text-[10px] text-ink-500">SNR = 20log10(mean/std)，线性域；display 阶段先逆 gamma。ROI 为矩形平坦区域。</div>
+      <div className="text-[11px] text-ink-500">SNR = 20log10(mean/std)，线性域；display 阶段先逆 gamma。ROI 为矩形平坦区域。</div>
       <Button className="btn-xs" onClick={() => { useStore.getState().setRoiKind('snr'); useStore.getState().setTool('roi'); }}>重新框选 ROI</Button>
     </div>
   );
@@ -165,11 +165,11 @@ function MtfView({ result }: { result: MtfResult }) {
       c.width = w * dpr; c.height = h * dpr;
       const ctx = c.getContext('2d')!;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.fillStyle = '#0d1115'; ctx.fillRect(0, 0, w, h);
-      ctx.strokeStyle = '#1f282f';
+      ctx.fillStyle = '#12171c'; ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = '#2e3942';
       for (let i = 0; i <= 5; i++) { const x = (w * i) / 5; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
       for (let i = 0; i <= 5; i++) { const y = (h * i) / 5; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
-      const colors = ['#ff6b6b', '#59c98a', '#4ea1ff', '#d7dde3'];
+      const colors = ['#ff7b7b', '#5fd99a', '#5cb0ff', '#e7edf3'];
       result.perChannel.forEach((ch, idx) => {
         if (!ch.curve.length) return;
         ctx.beginPath();
@@ -180,8 +180,8 @@ function MtfView({ result }: { result: MtfResult }) {
         });
         ctx.strokeStyle = colors[idx]; ctx.lineWidth = 1.2; ctx.stroke();
       });
-      ctx.fillStyle = '#6f7f8d'; ctx.font = '10px monospace';
-      ctx.fillText('0', 3, h - 3); ctx.fillText('0.5 cyc/px', w - 62, h - 3);
+      ctx.fillStyle = '#94a3b0'; ctx.font = '11px monospace';
+      ctx.fillText('0', 3, h - 3); ctx.fillText('0.5 cyc/px', w - 70, h - 3);
     };
     const ro = new ResizeObserver(draw);
     ro.observe(c);
@@ -190,16 +190,16 @@ function MtfView({ result }: { result: MtfResult }) {
   }, [result]);
   return (
     <div className="flex h-full flex-col gap-2">
-      <div className="flex flex-wrap gap-3 text-[10px]">
+      <div className="flex flex-wrap gap-3 text-[11px]">
         {result.perChannel.map((c) => (
-          <span key={c.channel} className="mono"><span className={c.channel === 'R' ? 'text-[#ff6b6b]' : c.channel === 'G' ? 'text-[#59c98a]' : c.channel === 'B' ? 'text-[#4ea1ff]' : 'text-ink-200'}>{c.channel}</span> 50%={c.mtf50.toFixed(3)} 10%={c.mtf10.toFixed(3)}</span>
+          <span key={c.channel} className="mono"><span className={c.channel === 'R' ? 'text-[#ff7b7b]' : c.channel === 'G' ? 'text-[#5fd99a]' : c.channel === 'B' ? 'text-[#5cb0ff]' : 'text-ink-200'}>{c.channel}</span> 50%={c.mtf50.toFixed(3)} 10%={c.mtf10.toFixed(3)}</span>
         ))}
         <span className="text-ink-500">angle {result.edge.angleDeg.toFixed(1)}° · contrast {result.edge.contrast.toFixed(2)}</span>
       </div>
       <canvas ref={ref} className="min-h-[110px] w-full flex-1 rounded border border-ink-700" />
       <div className="flex items-center gap-2">
         <Button className="btn-xs" onClick={() => { useStore.getState().setRoiKind('mtf'); useStore.getState().setTool('roi'); }}>重新框选斜边 ROI</Button>
-        <span className="text-[10px] text-ink-500">ISO 12233 · 4× oversampling · Hann · FFT</span>
+        <span className="text-[11px] text-ink-500">ISO 12233 · 4× oversampling · Hann · FFT</span>
       </div>
     </div>
   );
@@ -232,13 +232,13 @@ function SpectrumView({ result }: { result: NoiseSpectrumResult }) {
       <canvas ref={ref} className="h-[150px] w-full rounded border border-ink-700 sm:h-[170px] sm:w-[300px] sm:shrink-0" style={{ imageRendering: 'pixelated' }} />
       <div className="min-w-0 flex-1">
         <div className="text-[11px] text-ink-300">2D FFT · log power · {result.width}×{result.height}</div>
-        <div className="mt-1 text-[10px] text-ink-500">去趋势 plane · Hann 窗 · 径向平均 · H/V 1D PSD</div>
+        <div className="mt-1 text-[11px] text-ink-500">去趋势 plane · Hann 窗 · 径向平均 · H/V 1D PSD</div>
         <div className="mt-2 flex gap-2">
           <Button className="btn-xs" onClick={() => { useStore.getState().setRoiKind('noise'); useStore.getState().setTool('roi'); }}>重新框选平坦 ROI</Button>
         </div>
         <div className="mt-2 h-16 overflow-hidden">
           <div className="flex h-full items-end gap-[1px]">
-            {result.radial.filter((_, i) => i % 2 === 0).map((p, i) => <div key={i} className="flex-1 bg-[#4ea1ff]/70" style={{ height: `${Math.max(2, p.power * 100)}%` }} />)}
+            {result.radial.filter((_, i) => i % 2 === 0).map((p, i) => <div key={i} className="flex-1 bg-[#5cb0ff]/70" style={{ height: `${Math.max(2, p.power * 100)}%` }} />)}
           </div>
         </div>
       </div>
@@ -270,24 +270,24 @@ function ColorCheckerView({ result }: { result: ColorCheckerResult }) {
         <div className="kv"><span>四角</span><span className="mono">{doc.colorChecker.corners?.length ?? 0}/4</span></div>
         <div className="kv"><span>有效块</span><span className="mono">{result.validCount}/24</span></div>
         <div className="rounded border border-ink-700 p-2">
-          <div className="text-[10px] text-ink-500">mean ΔE00</div>
-          <div className="mono text-[20px]" style={{ color: result.meanDE00 <= 2.5 ? '#7ee2ad' : '#f3bf6d' }}>{result.meanDE00.toFixed(3)}</div>
-          <div className="text-[10px] text-ink-500">max ΔE00</div>
-          <div className="mono text-[15px]" style={{ color: result.maxDE00 <= 5 ? '#7ee2ad' : '#f3bf6d' }}>{result.maxDE00.toFixed(3)}</div>
-          <div className="mt-1 text-[10px] text-ink-500">mean |ΔC'| {result.meanAbsDC.toFixed(3)}</div>
-          <div className="text-[10px] text-ink-500">{result.method === 'de00-optimized' ? 'ΔE00 优化' : '最小二乘'}</div>
+          <div className="text-[11px] text-ink-500">mean ΔE00</div>
+          <div className="mono text-[20px]" style={{ color: result.meanDE00 <= 2.5 ? '#7fe3ae' : '#ffca7a' }}>{result.meanDE00.toFixed(3)}</div>
+          <div className="text-[11px] text-ink-500">max ΔE00</div>
+          <div className="mono text-[15px]" style={{ color: result.maxDE00 <= 5 ? '#7fe3ae' : '#ffca7a' }}>{result.maxDE00.toFixed(3)}</div>
+          <div className="mt-1 text-[11px] text-ink-500">mean |ΔC'| {result.meanAbsDC.toFixed(3)}</div>
+          <div className="text-[11px] text-ink-500">{result.method === 'de00-optimized' ? 'ΔE00 优化' : '最小二乘'}</div>
         </div>
         <Button className="btn-xs" variant="primary" onClick={applyFittedCcm}>应用 CCM 到管线</Button>
       </div>
       <div className="min-w-0 flex-1 overflow-auto scroll-thin">
-        <table className="w-full text-[10px]">
+        <table className="w-full text-[11px]">
           <thead className="text-ink-500"><tr className="text-left"><th>#</th><th>色块</th><th>ΔE00</th><th>ΔC'</th><th>used</th></tr></thead>
           <tbody className="mono">
             {result.patches.map((p, i) => (
               <tr key={i} className="border-t border-ink-700/60">
                 <td>{i + 1}</td>
                 <td className="font-sans text-ink-300">{p.name}</td>
-                <td style={{ color: p.dE00 > 5 ? '#ff8e8e' : p.dE00 > 2.5 ? '#f3bf6d' : '#7ee2ad' }}>{p.dE00.toFixed(2)}</td>
+                <td style={{ color: p.dE00 > 5 ? '#ff9a9a' : p.dE00 > 2.5 ? '#ffca7a' : '#7fe3ae' }}>{p.dE00.toFixed(2)}</td>
                 <td>{p.dC.toFixed(2)}</td>
                 <td>{p.used ? '✓' : '—'}</td>
               </tr>
@@ -318,13 +318,13 @@ function DiffView() {
           <Button className="btn-xs" onClick={() => { useStore.getState().setDiffMode(!useStore.getState().diffMode); renderActive(); }}>差异预览</Button>
           <Button className="btn-xs" onClick={() => { useStore.getState().setAbMode('stage'); renderActive(); }}>A/B 当前 vs bypass</Button>
           <Button className="btn-xs" variant="primary" onClick={() => analyze('diff')}>计算差异指标</Button>
-          <span className="text-[10px] text-ink-500">A/B 在画布中显示；指标在 Worker 内计算。</span>
+          <span className="text-[11px] text-ink-500">A/B 在画布中显示；指标在 Worker 内计算。</span>
         </div>
         {diff ? (
           <div className="grid grid-cols-3 gap-2">
-            <div className="rounded bg-ink-850 p-2"><div className="text-[10px] text-ink-500">MAE</div><div className="mono">{diff.metrics.mae.toFixed(5)}</div></div>
-            <div className="rounded bg-ink-850 p-2"><div className="text-[10px] text-ink-500">PSNR</div><div className="mono">{Number.isFinite(diff.metrics.psnrDb) ? diff.metrics.psnrDb.toFixed(2) + ' dB' : '∞'}</div></div>
-            <div className="rounded bg-ink-850 p-2"><div className="text-[10px] text-ink-500">max diff</div><div className="mono">{diff.metrics.maxDiff.toFixed(4)}</div></div>
+            <div className="rounded bg-ink-850 p-2"><div className="text-[11px] text-ink-500">MAE</div><div className="mono">{diff.metrics.mae.toFixed(5)}</div></div>
+            <div className="rounded bg-ink-850 p-2"><div className="text-[11px] text-ink-500">PSNR</div><div className="mono">{Number.isFinite(diff.metrics.psnrDb) ? diff.metrics.psnrDb.toFixed(2) + ' dB' : '∞'}</div></div>
+            <div className="rounded bg-ink-850 p-2"><div className="text-[11px] text-ink-500">max diff</div><div className="mono">{diff.metrics.maxDiff.toFixed(4)}</div></div>
           </div>
         ) : <div className="text-[11px] text-ink-500">点击“计算差异指标”：当前管线 vs 当前阶段 bypass（或所选快照）。</div>}
       </div>
@@ -382,7 +382,7 @@ export function AnalysisDock() {
         </div>
         <div className="analysis-controls flex shrink-0 items-center gap-2 px-2">
           <span className="field-label analysis-stage-label">阶段</span>
-          <select className="select h-[22px] text-[10px]" value={analysisStage} onChange={(e) => setAnalysisStage(e.target.value as typeof analysisStage)}>
+          <select className="select h-[22px] text-[11px]" value={analysisStage} onChange={(e) => setAnalysisStage(e.target.value as typeof analysisStage)}>
             <option value="levels">RAW</option>
             <option value="demosaic">去马赛克</option>
             <option value="denoise">降噪后</option>

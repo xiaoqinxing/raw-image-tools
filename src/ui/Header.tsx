@@ -17,10 +17,10 @@ export function Header({ onOpenImages, onOpenPipeline }: { onOpenImages: () => v
     <header className="app-header flex h-11 shrink-0 items-center gap-3 border-b border-ink-700 bg-ink-850 px-3">
       <Button variant="ghost" className="header-drawer-btn" onClick={onOpenImages} title="图像、快照与预设">图像</Button>
       <div className="flex shrink-0 items-center gap-2">
-        <div className="grid h-6 w-6 place-items-center rounded bg-[#1b4a70] text-[12px] font-semibold text-[#d9ecff]">R</div>
+        <div className="grid h-6 w-6 place-items-center rounded bg-[#1d4a70] text-[12px] font-semibold text-[#d8ecff]">R</div>
         <div className="header-brand-text">
           <div className="text-[12px] font-semibold tracking-wide text-ink-100">RAW Lab</div>
-          <div className="header-brand-subtitle text-[9px] text-ink-500">ISP WORKBENCH</div>
+          <div className="header-brand-subtitle text-[10px] text-ink-500">ISP WORKBENCH</div>
         </div>
       </div>
       <div className="header-divider mx-2 h-5 w-px bg-ink-700" />
@@ -29,7 +29,7 @@ export function Header({ onOpenImages, onOpenPipeline }: { onOpenImages: () => v
         if (name) setProjectName(name);
       }} title="点击重命名工程">{projectName}</button>
       <div className="header-actions ml-auto flex min-w-0 items-center gap-1">
-        {busy ? <div className="mr-2 flex items-center gap-2 text-[10px] text-ink-300"><span className="spin" /><span className="header-busy-label">{busyLabel}</span></div> : null}
+        {busy ? <div className="mr-2 flex items-center gap-2 text-[11px] text-ink-300"><span className="spin" /><span className="header-busy-label">{busyLabel}</span></div> : null}
         <Button variant="primary" onClick={() => setShowImport(true)}>
           <span className="hidden sm:inline">导入图像</span>
           <span className="sm:hidden">导入</span>
@@ -45,7 +45,7 @@ export function Header({ onOpenImages, onOpenPipeline }: { onOpenImages: () => v
         <ProjectMenu />
         <Button className="header-drawer-btn" onClick={onOpenPipeline} title="ISP 管线">管线</Button>
         {doc?.stats ? (
-          <div className="header-stats ml-2 flex items-center gap-2 text-[10px] text-ink-400">
+          <div className="header-stats ml-2 flex items-center gap-2 text-[11px] text-ink-400">
             <span className="badge">{doc.source === 'full' ? 'FULL' : 'PREVIEW'}</span>
             <span className="mono">{doc.stats.timings.totalMs.toFixed(0)} ms</span>
             <span className="mono">{(doc.stats.cacheBytes / 1048576).toFixed(0)} MB</span>
