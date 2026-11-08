@@ -8,6 +8,7 @@ import type {
   Vec4,
 } from '../types';
 import { deriveCscFromDng, IDENTITY3, matrixNearIdentity } from '../color/matrices';
+import { defaultLevelsForBitDepth } from '../raw/levels';
 
 export const STAGE_ORDER: StageId[] = [
   'levels',
@@ -87,12 +88,15 @@ export function createDefaultParams(raw?: RawImage): PipelineParams {
   const csc = raw ? deriveCscFromDng(raw.color) : { matrix: IDENTITY3, source: 'identity' as const, warnings: ['没有 RAW 色彩元数据。'] };
   const hasCsc = !matrixNearIdentity(csc.matrix);
   const wb = raw?.wb.asShot ?? [1, 1, 1, 1];
+  const levels = raw
+    ? defaultLevelsForBitDepth(raw.geometry.bitDepth)
+    : { black: [0, 0, 0, 0] as Vec4, white: [65535, 65535, 65535, 65535] as Vec4 };
   return {
     schemaVersion: 1,
     levels: {
       bypass: false,
-      black: raw?.levels.black ?? [0, 0, 0, 0],
-      white: raw?.levels.white ?? [65535, 65535, 65535, 65535],
+      black: raw?.levels.black ?? levels.black,
+      white: raw?.levels.white ?? levels.white,
       clampNegative: true,
       source: raw ? 'metadata' : 'custom',
     },

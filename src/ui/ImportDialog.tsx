@@ -4,6 +4,7 @@ import { useStore } from '../state/store';
 import { importBare, importDng } from '../services/editor';
 import type { BareRawConfig, CfaPattern, Vec4 } from '../core/types';
 import { bareRowBytes } from '../core/raw/bare';
+import { defaultLevelsForBitDepth } from '../core/raw/levels';
 import { Button, NumberField, Segmented } from './controls';
 
 export function ImportDialog() {
@@ -18,6 +19,7 @@ export function ImportDialog() {
   const [height, setHeight] = React.useState(0);
   const [cfa, setCfa] = React.useState<CfaPattern>('RGGB');
   const [bitDepth, setBitDepth] = React.useState<8 | 10 | 12 | 14 | 16>(12);
+  const initialLevels = React.useMemo(() => defaultLevelsForBitDepth(12), []);
   const [packingKind, setPackingKind] = React.useState<'unpacked' | 'packed'>('unpacked');
   const [container, setContainer] = React.useState<'u8' | 'u16'>('u16');
   const [endian, setEndian] = React.useState<'le' | 'be'>('le');
@@ -31,11 +33,20 @@ export function ImportDialog() {
   const [activeW, setActiveW] = React.useState(0);
   const [activeH, setActiveH] = React.useState(0);
   const [blackMode, setBlackMode] = React.useState<'scalar' | 'cfa'>('scalar');
-  const [blackScalar, setBlackScalar] = React.useState(0);
-  const [whiteScalar, setWhiteScalar] = React.useState(4095);
-  const [blackCfa, setBlackCfa] = React.useState<Vec4>([0, 0, 0, 0]);
-  const [whiteCfa, setWhiteCfa] = React.useState<Vec4>([4095, 4095, 4095, 4095]);
+  const [blackScalar, setBlackScalar] = React.useState(initialLevels.black[0]);
+  const [whiteScalar, setWhiteScalar] = React.useState(initialLevels.white[0]);
+  const [blackCfa, setBlackCfa] = React.useState<Vec4>(initialLevels.black);
+  const [whiteCfa, setWhiteCfa] = React.useState<Vec4>(initialLevels.white);
   const [sampleShift, setSampleShift] = React.useState(0);
+
+  const changeBitDepth = (bits: 8 | 10 | 12 | 14 | 16) => {
+    setBitDepth(bits);
+    const defaults = defaultLevelsForBitDepth(bits);
+    setBlackScalar(defaults.black[0]);
+    setWhiteScalar(defaults.white[0]);
+    setBlackCfa(defaults.black);
+    setWhiteCfa(defaults.white);
+  };
 
   React.useEffect(() => {
     if (!open) return;
@@ -124,7 +135,7 @@ export function ImportDialog() {
                 <NumberField label="存储宽" value={width} onChange={setWidth} min={1} max={65535} />
                 <NumberField label="存储高" value={height} onChange={setHeight} min={1} max={65535} />
                 <label className="flex flex-col gap-1"><span className="field-label">CFA</span><select className="select" value={cfa} onChange={(e) => setCfa(e.target.value as CfaPattern)}><option>RGGB</option><option>BGGR</option><option>GRBG</option><option>GBRG</option></select></label>
-                <label className="flex flex-col gap-1"><span className="field-label">位宽</span><select className="select" value={bitDepth} onChange={(e) => setBitDepth(Number(e.target.value) as typeof bitDepth)}><option value={8}>8</option><option value={10}>10</option><option value={12}>12</option><option value={14}>14</option><option value={16}>16</option></select></label>
+                <label className="flex flex-col gap-1"><span className="field-label">位宽</span><select className="select" value={bitDepth} onChange={(e) => changeBitDepth(Number(e.target.value) as typeof bitDepth)}><option value={8}>8</option><option value={10}>10</option><option value={12}>12</option><option value={14}>14</option><option value={16}>16</option></select></label>
               </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 <label className="flex flex-col gap-1"><span className="field-label">packing</span><select className="select" value={packingKind} onChange={(e) => setPackingKind(e.target.value as typeof packingKind)}><option value="unpacked">unpacked</option><option value="packed">packed</option></select></label>
@@ -148,6 +159,9 @@ export function ImportDialog() {
               </div>
               <div className="rounded border border-ink-700 p-2">
                 <div className="mb-2 flex items-center justify-between"><span className="field-label">黑/白电平</span><Segmented value={blackMode} onChange={setBlackMode} options={[{ value: 'scalar', label: '标量' }, { value: 'cfa', label: '逐 CFA' }]} /></div>
+                <div className="mb-2 text-[11px] leading-4 text-ink-500">
+                  默认按位宽填充：10-bit 64/1023，12-bit 256/4095；切换位宽会重置为默认值。
+                </div>
                 {blackMode === 'scalar' ? (
                   <div className="grid grid-cols-2 gap-2">
                     <NumberField label="black DN" value={blackScalar} onChange={setBlackScalar} min={0} />

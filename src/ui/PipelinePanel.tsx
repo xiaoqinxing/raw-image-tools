@@ -115,7 +115,7 @@ function StageControls({ stage }: { stage: StageId }) {
         <Vec4Editor label="白电平（DN）" value={doc.params.levels.white} onChange={(v) => updateStageAndRender('levels', { white: v })} max={131071} />
         <Toggle on={doc.params.levels.clampNegative} onChange={(v) => updateStageAndRender('levels', { clampNegative: v })} label="扣除负值" />
         <div className="kv"><span>来源</span><span className="mono">{doc.params.levels.source}</span></div>
-        <div className="text-[11px] leading-4 text-ink-500">Bypass 时按 0 / 65535 做容器归一化，保证后续阶段仍可运行。</div>
+        <div className="text-[11px] leading-4 text-ink-500">Bypass 时按 0 / 位宽最大 DN 归一化（10-bit 1023、12-bit 4095），保证后续阶段仍可运行。</div>
       </div>
     );
   }

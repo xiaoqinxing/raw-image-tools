@@ -5,6 +5,25 @@ const fixture = path.resolve('tests/fixtures/test-flat.raw');
 
 test.setTimeout(120_000);
 
+test('bare RAW import level defaults follow the selected bit depth', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '导入图像' }).first().click();
+  await page.getByRole('button', { name: '裸 RAW 二进制' }).click();
+
+  const bitDepth = page.getByLabel('位宽');
+  await bitDepth.selectOption('10');
+  await expect(page.getByLabel('black DN')).toHaveValue('64');
+  await expect(page.getByLabel('white DN')).toHaveValue('1023');
+
+  await bitDepth.selectOption('12');
+  await expect(page.getByLabel('black DN')).toHaveValue('256');
+  await expect(page.getByLabel('white DN')).toHaveValue('4095');
+
+  await bitDepth.selectOption('14');
+  await expect(page.getByLabel('black DN')).toHaveValue('1024');
+  await expect(page.getByLabel('white DN')).toHaveValue('16383');
+});
+
 test('imports a bare RAW and reports bad configuration', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: '导入图像' }).first().click();

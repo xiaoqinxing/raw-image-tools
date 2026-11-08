@@ -13,9 +13,10 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 
 | 套件 | 数量 | 结果 |
 |------|------|------|
-| Vitest 单元/数值 | 87 | 全部通过 |
+| Vitest 单元/数值 | 89 | 全部通过 |
 | Playwright E2E：DNG 导入 / 阶段 / 16-bit 导出 / 工程保存 | 1 | 通过 |
 | Playwright E2E：裸 RAW 导入 + 错误配置 | 1 | 通过 |
+| Playwright E2E：裸 RAW 黑白电平随位宽默认 | 1 | 通过 |
 | Playwright E2E：ColorChecker 四角 + CCM 拟合 | 1 | 通过 |
 | Playwright E2E：差异指标 | 1 | 通过 |
 | Playwright E2E：工程 JSON 重开 + 重关联 | 1 | 通过 |
@@ -29,13 +30,14 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 | Playwright E2E：分析按需统计 / 单次预览 / 悬停读数 | 3 | 通过 |
 | Playwright E2E：灰点 WB 采样线性 RAW 阶段 | 1 | 通过 |
 | Playwright E2E：Gamma 线性显示与锐化 SKIP | 1 | 通过 |
-| **E2E 合计** | **17** | **全部通过** |
+| **E2E 合计** | **18** | **全部通过** |
 
 覆盖的数值测试：
 
 - CIEDE2000 Sharma 40 组标准向量（误差 < 1e-3）。
 - 色彩矩阵求逆、Bradford D50→D65、sRGB 传递函数往返。
 - 裸 RAW：u16 LE/BE、左/右对齐、packed 10/12/14-bit LSB/MSB、MIPI RAW10/12/14、header/stride/active crop/CFA 相位、截断与非法电平。
+- 黑白电平默认：按位宽生成 1/16 满量程黑电平与 $2^{bits}-1$ 白电平（10-bit 64/1023，12-bit 256/4095）。
 - DNG：TIFF 标签解析、Black/White/AsShotNeutral/CFA/ActiveArea、LibRaw 解包。
 - 去马赛克：Bilinear / MHC / AHD 常量保持，MHC 与 GPU 结果最大误差约 1.7e-4。
 - 分析：直方图、SNR（高斯噪声 <0.2 dB）、MTF50（高斯模糊斜边误差 <5%）、白噪声频谱平坦度、CCM 最小二乘恢复（mean ΔE00 < 1）。
@@ -94,7 +96,8 @@ AHD Quality：
 | 项 | 状态 | 备注 |
 |----|------|------|
 | DNG 导入 + DNG 专属标签 | 通过 | Opcode/Linearization 未执行，提示 |
-| 裸 RAW：8/10/12/14/16、packed/unpacked、LE/BE、stride/offset/active/CFA | 通过 | 单元测试覆盖 |
+| 裸 RAW：8/10/12/14/16、packed/unpacked、LE/BE、stride/offset/active/CFA | 通过 | 单元测试覆盖；黑白电平默认随位宽 |
+| DNG 缺 BlackLevel/WhiteLevel | 通过 | 按位宽默认值填充并给出警告 |
 | 固定 10 阶段、逐阶段 bypass/调参/查看 | 通过 | 预览与全分辨率 |
 | 阶段 A/B / 快照 A/B / 闪烁 / 可拖分割线 | 通过 | 手动验证 + 差异 E2E |
 | 平场、灰点 WB、guided/bilateral 降噪 | 通过 | 平场兼容性检查；灰点读取线性 RAW 阶段；Bilateral E2E |

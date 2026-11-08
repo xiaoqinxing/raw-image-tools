@@ -1,4 +1,5 @@
 import type { CfaPattern, DngColorMeta, Mat3, Rect, Vec4 } from '../types';
+import { defaultLevelsForBitDepth, normalizeBitDepth } from './levels';
 
 export interface DngTags {
   width?: number;
@@ -178,10 +179,12 @@ function levelsFromTags(
   blackRaw: number[] | undefined,
   repeat: number[] | undefined,
   whiteRaw: number[] | undefined,
+  bitDepth: number,
 ): { black: Vec4; white: Vec4 } {
   const sites = canonicalSiteChannels(pattern);
-  const black = [0, 0, 0, 0];
-  const white = [65535, 65535, 65535, 65535];
+  const defaults = defaultLevelsForBitDepth(bitDepth);
+  const black = [...defaults.black];
+  const white = [...defaults.white];
   if (blackRaw && blackRaw.length) {
     if (blackRaw.length === 1) {
       black.fill(blackRaw[0]);
@@ -256,9 +259,10 @@ export function parseDngMetadata(buffer: ArrayBuffer): DngTags {
 
   const active = asRectActive(merged.get(50829));
   const defaultCrop = asRectCrop(merged.get(50719), merged.get(50720));
+  const bitDepth = normalizeBitDepth(firstNum(merged.get(258)));
   const levels = cfaPattern
-    ? levelsFromTags(cfaPattern, asNumbers(merged.get(50714)), asNumbers(merged.get(50713)), asNumbers(merged.get(50717)))
-    : { black: [0, 0, 0, 0] as Vec4, white: [65535, 65535, 65535, 65535] as Vec4 };
+    ? levelsFromTags(cfaPattern, asNumbers(merged.get(50714)), asNumbers(merged.get(50713)), asNumbers(merged.get(50717)), bitDepth)
+    : defaultLevelsForBitDepth(bitDepth);
 
   const orientationRaw = firstNum(merged.get(274)) ?? 1;
   const orientation: 1 | 3 | 6 | 8 =
@@ -304,7 +308,10 @@ export function parseDngMetadata(buffer: ArrayBuffer): DngTags {
     warnings.push('DNG 含 BlackLevelDeltaH/V；首版按逐 CFA 常数黑电平处理。');
   }
   if (asNumbers(merged.get(50717)) === undefined) {
-    warnings.push('DNG 未提供 WhiteLevel，将使用 LibRaw 的 ColorMaximum 作为白电平。');
+    warnings.push(`DNG 未提供 WhiteLevel，按 ${bitDepth}-bit 默认值 ${levels.white[0]} 处理。`);
+  }
+  if (asNumbers(merged.get(50714)) === undefined) {
+    warnings.push(`DNG 未提供 BlackLevel，按 ${bitDepth}-bit 默认值 ${levels.black[0]} 处理。`);
   }
 
   return {

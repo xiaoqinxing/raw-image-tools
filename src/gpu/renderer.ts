@@ -10,6 +10,7 @@ import type {
 import { STAGE_DOMAIN, STAGE_ORDER, effectiveCcm, effectiveCsc, hashString, stableStringify } from '../core/pipeline/params';
 import { ccmFromTotal } from '../core/color/matrices';
 import { demosaicAHD } from '../core/demosaic/ahd';
+import { defaultLevelsForBitDepth } from '../core/raw/levels';
 import { previewFactor, resourceFactor, scaleRaw } from '../core/raw/scale';
 import {
   BILATERAL_FRAG,
@@ -580,7 +581,7 @@ export class Renderer {
       gl.uniform2i(this.u(p, 'uOrigin'), raw.geometry.active.x, raw.geometry.active.y);
       gl.uniform4iv(this.u(p, 'uSites'), raw.cfa.siteChannels);
       const black = params.levels.bypass ? [0, 0, 0, 0] : params.levels.black;
-      const white = params.levels.bypass ? [65535, 65535, 65535, 65535] : params.levels.white;
+      const white = params.levels.bypass ? defaultLevelsForBitDepth(raw.geometry.bitDepth).white : params.levels.white;
       gl.uniform4fv(this.u(p, 'uBlack'), black);
       gl.uniform4fv(this.u(p, 'uWhite'), white);
       gl.uniform1i(this.u(p, 'uClampNegative'), params.levels.clampNegative && !params.levels.bypass ? 1 : 0);
