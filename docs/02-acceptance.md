@@ -27,7 +27,8 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 | Playwright E2E：桌面 / 平板 / 手机 / 横屏响应式布局与抽屉 | 1 | 通过 |
 | Playwright E2E：状态栏版本号 + 自动更新日志弹窗 | 1 | 通过 |
 | Playwright E2E：分析按需统计 / 单次预览 / 悬停读数 | 3 | 通过 |
-| **E2E 合计** | **15** | **全部通过** |
+| Playwright E2E：灰点 WB 采样线性 RAW 阶段 | 1 | 通过 |
+| **E2E 合计** | **16** | **全部通过** |
 
 覆盖的数值测试：
 
@@ -94,7 +95,7 @@ AHD Quality：
 | 裸 RAW：8/10/12/14/16、packed/unpacked、LE/BE、stride/offset/active/CFA | 通过 | 单元测试覆盖 |
 | 固定 10 阶段、逐阶段 bypass/调参/查看 | 通过 | 预览与全分辨率 |
 | 阶段 A/B / 快照 A/B / 闪烁 / 可拖分割线 | 通过 | 手动验证 + 差异 E2E |
-| 平场、灰点 WB、guided/bilateral 降噪 | 通过 | 平场兼容性检查；Bilateral E2E |
+| 平场、灰点 WB、guided/bilateral 降噪 | 通过 | 平场兼容性检查；灰点读取线性 RAW 阶段；Bilateral E2E |
 | Fast MHC/Bilinear GPU；Quality AHD CPU | 通过 | AHD 为净室近似 |
 | CCM 手动/拟合、CSC DNG 推导、USM、裁剪、8/16-bit PNG、任意阶段导出 | 通过 | 16-bit 无 ICC；RAW 阶段灰度 |
 | 直方图/悬停读数/SNR/MTF/波形/噪声频谱/ColorChecker/差异 | 通过 | 差异为 A vs bypass/快照；统计在展开/切换时刷新，参数变化标记过期 |

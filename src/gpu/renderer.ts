@@ -947,6 +947,11 @@ export class Renderer {
     return this.readTexture(result.texture, rect);
   }
 
+  /** Read a specific render result without relying on the last displayed stage. */
+  readResult(result: StageResult, rect?: { x: number; y: number; w: number; h: number }): ReadPixels {
+    return this.readTexture(result.texture, rect);
+  }
+
   /** Read the pixel currently shown on the canvas at an image-space position. */
   sampleDisplayed(x: number, y: number): { rgb: [number, number, number]; stage: StageId; domain: Domain; width: number; height: number } | null {
     const result = this.lastShown;

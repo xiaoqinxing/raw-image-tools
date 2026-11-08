@@ -141,7 +141,7 @@ self.onmessage = async (event: MessageEvent<RenderWorkerRequest>) => {
     if (msg.type === 'pickGray') {
       if (!raw) throw new Error('没有 RAW');
       const r = renderer.renderPreview(msg.params, 'flat', { display: false });
-      const pixels = renderer.readStage('preview', r.result.stage);
+      const pixels = renderer.readResult(r.result);
       const sx = pixels.width / raw.geometry.active.w;
       const sy = pixels.height / raw.geometry.active.h;
       const cx = msg.point.x * sx;
@@ -209,7 +209,7 @@ self.onmessage = async (event: MessageEvent<RenderWorkerRequest>) => {
       const r = renderer.renderPreview(msg.params, target, { display: false });
       const stage = r.result.stage;
       const domain = r.result.domain;
-      const pixels = renderer.readStage('preview', stage);
+      const pixels = renderer.readResult(r.result);
       const fullW = raw.geometry.active.w;
       const fullH = raw.geometry.active.h;
       const sx = pixels.width / fullW;
