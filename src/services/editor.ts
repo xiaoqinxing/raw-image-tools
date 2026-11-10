@@ -16,6 +16,7 @@ import type {
 } from '../core/types';
 import { createDefaultParams, bypassStage, toPresetParams, fromPresetParams, paramsHash, linearPreviewFor, migrateParams } from '../core/pipeline/params';
 import { getReference } from '../core/color/colorchecker-data';
+import { defaultColorCheckerSettings, normalizeColorCheckerSettings } from '../core/colorchecker/settings';
 import { decodeService, DecodeError } from './decode';
 import { ImageSession, stripFlat, stripRaw } from './session';
 import { useStore, type ImageDoc, type Viewport } from '../state/store';
@@ -144,6 +145,7 @@ function makeDoc(raw: RawImage, decodeMs: number, flat: FlatField | null = null)
       corners: null,
       referenceId: 'classic24-pre2014-d65',
     },
+    colorCheckerSettings: defaultColorCheckerSettings(),
     decodeMs,
     status: 'ready',
     generation: 0,
@@ -511,25 +513,92 @@ export async function fitColorChecker(): Promise<void> {
     toast('请先在图像上点选色卡四角');
     return;
   }
-  const vp = state.viewport;
+  const settings = normalizeColorCheckerSettings(doc.colorCheckerSettings);
   const normalized = corners.map((p) => ({
     x: p.x / doc.meta.geometry.active.w,
     y: p.y / doc.meta.geometry.active.h,
   }));
   state.setAnalysisBusy(true);
+  let params = doc.params;
+  let wb: import('../core/types').ColorCheckerWbResult | undefined;
+  const extraWarnings: string[] = [];
   try {
-    const result = await session.analyze(doc.params, 'denoise', 'colorchecker', null, {
+    if (settings.autoWb) {
+      try {
+        wb = await session.computeChartWb(params, normalized, settings.inset);
+        params = structuredClone(params);
+        params.wb = {
+          ...params.wb,
+          bypass: false,
+          mode: 'custom',
+          multipliers: wb.multipliers,
+          pick: null,
+        };
+        state.setParams(doc.id, params);
+        renderActive();
+        extraWarnings.push(...wb.warnings);
+      } catch (e) {
+        extraWarnings.push(`未按色卡中性块校正 WB：${e instanceof Error ? e.message : String(e)}`);
+      }
+    } else if (params.wb.bypass) {
+      extraWarnings.push('白平衡处于 Bypass；拟合结果只对当前未校正的相机 RGB 有效。');
+    }
+    const result = await session.analyze(params, 'denoise', 'colorchecker', null, {
       corners: normalized,
       referenceId: doc.colorChecker.referenceId,
-      inset: 0.5,
+      inset: settings.inset,
+      weights: settings.weights,
+      target: settings.target,
+      objective: settings.objective,
     });
     if (result.kind !== 'colorchecker') throw new Error('拟合返回类型错误');
+    result.wb = wb;
+    if (extraWarnings.length) result.warnings = [...extraWarnings, ...result.warnings];
     state.setAnalysis(doc.id, result);
     state.setColorChecker(doc.id, { ...doc.colorChecker, fit: result });
     state.setAnalysisBusy(false);
-    toast(`CCM 拟合完成：mean ΔE00 ${result.meanDE00.toFixed(2)}，max ${result.maxDE00.toFixed(2)}`);
+    const targetAdjusted = Math.abs(settings.target.saturation - 100) > 1e-9 || Math.abs(settings.target.hue) > 1e-9;
+    const decimals = (v: number | undefined) => (typeof v === 'number' ? v.toFixed(2) : '—');
+    toast(targetAdjusted
+      ? `CCM 拟合完成：目标 mean ΔE00 ${decimals(result.weightedMeanDE00)}，标准 mean ${decimals(result.meanDE00Standard)}`
+      : `CCM 拟合完成：mean ΔE00 ${result.meanDE00.toFixed(2)}，max ${result.maxDE00.toFixed(2)}`);
   } catch (e) {
     state.setAnalysisBusy(false);
+    toast(e instanceof Error ? e.message : String(e));
+  }
+}
+
+/** Apply the four bottom-row neutral patches as the white balance for the document. */
+export async function applyChartWb(): Promise<void> {
+  const state = useStore.getState();
+  const doc = state.activeId ? state.docs[state.activeId] : null;
+  if (!doc) return;
+  const session = sessions.get(doc.id);
+  if (!session) return;
+  const corners = doc.colorChecker.corners;
+  if (!corners) {
+    toast('请先在图像上点选色卡四角');
+    return;
+  }
+  const normalized = corners.map((p) => ({
+    x: p.x / doc.meta.geometry.active.w,
+    y: p.y / doc.meta.geometry.active.h,
+  }));
+  try {
+    const settings = normalizeColorCheckerSettings(doc.colorCheckerSettings);
+    const wb = await session.computeChartWb(doc.params, normalized, settings.inset);
+    const params = structuredClone(doc.params);
+    params.wb = {
+      ...params.wb,
+      bypass: false,
+      mode: 'custom',
+      multipliers: wb.multipliers,
+      pick: null,
+    };
+    state.setParams(doc.id, params);
+    renderActive();
+    toast(`WB 已按色卡中性块设置：R ${wb.multipliers[0].toFixed(3)} / G 1.000 / B ${wb.multipliers[3].toFixed(3)}`);
+  } catch (e) {
     toast(e instanceof Error ? e.message : String(e));
   }
 }
@@ -663,6 +732,21 @@ function flatRef(flat: FlatField): FlatFileRef {
   return { id: flat.id, fileName: flat.fileName, fileSize: flat.fileSize, sha256: flat.sha256 };
 }
 
+/** Fit settings are deliberately ephemeral; keep only result metrics in projects. */
+function projectColorChecker(cc: import('../core/types').ColorCheckerSession): import('../core/types').ColorCheckerSession {
+  if (!cc.fit) return cc;
+  const fit = {
+    ...cc.fit,
+    weights: undefined,
+    targetSaturation: undefined,
+    targetHue: undefined,
+    objective: undefined,
+    samples: cc.fit.samples?.map((sample) => ({ ...sample, weight: 1 })),
+    patches: cc.fit.patches.map((patch) => ({ ...patch, weight: undefined })),
+  };
+  return { ...cc, fit };
+}
+
 export function buildProject(): ProjectFile {
   const state = useStore.getState();
   const images: ProjectImage[] = state.order.map((id) => {
@@ -684,7 +768,7 @@ export function buildProject(): ProjectFile {
       },
       params: d.params,
       snapshots: d.snapshots,
-      colorChecker: d.colorChecker,
+      colorChecker: projectColorChecker(d.colorChecker),
       roi: d.roi,
       probes: d.probes,
       flat: d.flat ? flatRef(d.flat) : undefined,
@@ -785,6 +869,7 @@ export async function relinkProjectImage(projectImage: ProjectImage, file: File,
   doc.params = migrateParams(projectImage.params);
   doc.snapshots = (projectImage.snapshots ?? []).map((s) => ({ ...structuredClone(s), params: migrateParams(s.params) }));
   doc.colorChecker = structuredClone(projectImage.colorChecker ?? { corners: null, referenceId: 'classic24-pre2014-d65' });
+  doc.colorCheckerSettings = defaultColorCheckerSettings();
   doc.roi = projectImage.roi ?? legacyRoi(projectImage.rois);
   doc.probes = structuredClone(projectImage.probes ?? []);
   if (projectImage.flat) doc.flat = flat ? stripFlat(flat) : null;

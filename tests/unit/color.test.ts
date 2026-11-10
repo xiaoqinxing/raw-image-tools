@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { deltaE00, labToLinearSrgb, linearSrgbToLab, srgbDecode, srgbEncode } from '../../src/core/color/lab';
+import { deltaE00, deltaE00Parts, labToLinearSrgb, labToLch, lchToLab, linearSrgbToLab, srgbDecode, srgbEncode } from '../../src/core/color/lab';
+import { adjustReferenceTargets, gamutMapLab } from '../../src/core/color/target';
+import { srgbABEnvelope } from '../../src/core/color/gamut';
 import { bradfordAdaptation, inverse3, mul3, mul3Vec, D50_XY, D65_XY, deriveCscFromDng, IDENTITY3 } from '../../src/core/color/matrices';
 
 describe('color math', () => {
@@ -81,4 +83,45 @@ describe('CIEDE2000', () => {
       expect(deltaE00(a as [number, number, number], b as [number, number, number])).toBeCloseTo(expected, 3);
     });
   }
+});
+
+describe('LCh and target adjustment', () => {
+  it('round-trips Lab through LCh', () => {
+    const lab = [52, 23, -18] as [number, number, number];
+    const back = lchToLab(labToLch(lab));
+    for (let i = 0; i < 3; i++) expect(back[i]).toBeCloseTo(lab[i], 9);
+  });
+
+  it('keeps L* and rotates hue', () => {
+    const lab = [50, 20, 0] as [number, number, number];
+    const adjusted = adjustReferenceTargets([[0.2, 0.1, 0.1]], [lab], { saturation: 100, hue: 50 });
+    expect(adjusted.lab[0][0]).toBeCloseTo(50, 1);
+    expect(labToLch(adjusted.lab[0]).h).toBeCloseTo(50, 0);
+    expect(labToLch(adjusted.lab[0]).C).toBeCloseTo(20, 0);
+  });
+
+  it('does not tint near-neutral targets', () => {
+    const lab = [50, 0.2, -0.1] as [number, number, number];
+    const adjusted = adjustReferenceTargets([[0.2, 0.2, 0.2]], [lab], { saturation: 200, hue: 45 });
+    expect(adjusted.lab[0][1]).toBeCloseTo(0.2, 5);
+    expect(adjusted.lab[0][2]).toBeCloseTo(-0.1, 5);
+  });
+
+  it('gamut-maps out-of-gamut Lab back into linear sRGB', () => {
+    const mapped = gamutMapLab([50, 120, -120]);
+    expect(mapped.rgb.every((v) => v >= 0 && v <= 1)).toBe(true);
+    expect(mapped.clipped).toBe(true);
+  });
+
+  it('builds a finite sRGB gamut envelope', () => {
+    const points = srgbABEnvelope(72, 8);
+    expect(points.length).toBeGreaterThan(12);
+    expect(points.every(([a, b]) => Number.isFinite(a) && Number.isFinite(b))).toBe(true);
+  });
+
+  it('exposes a chroma-only CIEDE2000 component', () => {
+    const parts = deltaE00Parts([50, 40, 0], [50, -40, 0]);
+    expect(parts.dEChroma).toBeGreaterThan(0);
+    expect(parts.dEChroma).toBeLessThan(parts.dE00 + 1e-9);
+  });
 });

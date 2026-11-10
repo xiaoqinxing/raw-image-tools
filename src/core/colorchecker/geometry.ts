@@ -1,4 +1,4 @@
-import type { Point } from '../types';
+import type { ColorCheckerSampleReason, Point } from '../types';
 
 export type Homography = [number, number, number, number, number, number, number, number, number];
 
@@ -52,12 +52,96 @@ export function applyHomography(h: Homography, u: number, v: number): Point {
   };
 }
 
+export interface ColorCheckerGridCell {
+  index: number;
+  center: Point;
+  cellQuad: [Point, Point, Point, Point];
+  /** The actual area that is averaged, inset inside the cell. */
+  sampleQuad: [Point, Point, Point, Point];
+}
+
+/**
+ * Build the 6×4 patch grid. `inset` is the sample side length as a fraction of
+ * the cell (0.5 = centre 50%×50%).
+ */
+export function buildColorCheckerGrid(
+  corners: [Point, Point, Point, Point],
+  inset = 0.5,
+  cols = 6,
+  rows = 4,
+): ColorCheckerGridCell[] | null {
+  const h = homographyFromCorners(corners);
+  if (!h) return null;
+  const side = Math.max(0.1, Math.min(0.95, inset));
+  const margin = (1 - side) / 2;
+  const cells: ColorCheckerGridCell[] = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const u0 = c / cols, u1 = (c + 1) / cols;
+      const v0 = r / rows, v1 = (r + 1) / rows;
+      const su0 = u0 + (u1 - u0) * margin;
+      const su1 = u1 - (u1 - u0) * margin;
+      const sv0 = v0 + (v1 - v0) * margin;
+      const sv1 = v1 - (v1 - v0) * margin;
+      cells.push({
+        index: r * cols + c,
+        center: applyHomography(h, (u0 + u1) / 2, (v0 + v1) / 2),
+        cellQuad: [
+          applyHomography(h, u0, v0),
+          applyHomography(h, u1, v0),
+          applyHomography(h, u1, v1),
+          applyHomography(h, u0, v1),
+        ],
+        sampleQuad: [
+          applyHomography(h, su0, sv0),
+          applyHomography(h, su1, sv0),
+          applyHomography(h, su1, sv1),
+          applyHomography(h, su0, sv1),
+        ],
+      });
+    }
+  }
+  return cells;
+}
+
+function pointInQuad(x: number, y: number, q: [Point, Point, Point, Point]): boolean {
+  let sign = 0;
+  for (let i = 0; i < 4; i++) {
+    const a = q[i];
+    const b = q[(i + 1) % 4];
+    const cross = (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x);
+    if (Math.abs(cross) < 1e-9) continue;
+    const s = Math.sign(cross);
+    if (sign !== 0 && s !== sign) return false;
+    sign = s;
+  }
+  return true;
+}
+
+function trimmedMean(values: number[], trim = 0.1): number {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const cut = Math.min(Math.floor(sorted.length * trim), Math.floor((sorted.length - 1) / 2));
+  let sum = 0;
+  let n = 0;
+  for (let i = cut; i < sorted.length - cut; i++) {
+    sum += sorted[i];
+    n++;
+  }
+  return n ? sum / n : sorted[Math.floor(sorted.length / 2)] ?? 0;
+}
+
 export interface ColorCheckerSampling {
   samples: Array<[number, number, number]>;
   centers: Point[];
+  sampleQuads: Array<[Point, Point, Point, Point]>;
   patchRects: Array<{ x: number; y: number; w: number; h: number }>;
   clipped: boolean[];
+  clippedFractions: number[];
+  pixelCounts: number[];
+  reasons: Array<ColorCheckerSampleReason | undefined>;
   valid: boolean[];
+  /** Minimum cell edge length in pixels. */
   cellSize: number;
 }
 
@@ -68,62 +152,84 @@ export function sampleColorCheckerGrid(
   corners: [Point, Point, Point, Point],
   inset = 0.5,
 ): ColorCheckerSampling | null {
-  const h = homographyFromCorners(corners);
-  if (!h) return null;
+  const cells = buildColorCheckerGrid(corners, inset);
+  if (!cells) return null;
   const samples: Array<[number, number, number]> = [];
   const centers: Point[] = [];
+  const sampleQuads: Array<[Point, Point, Point, Point]> = [];
   const patchRects: Array<{ x: number; y: number; w: number; h: number }> = [];
   const clipped: boolean[] = [];
+  const clippedFractions: number[] = [];
+  const pixelCounts: number[] = [];
+  const reasons: Array<ColorCheckerSampleReason | undefined> = [];
   const valid: boolean[] = [];
-  const cols = 6, rows = 4;
-  let cellMin = Infinity;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const u0 = c / cols, u1 = (c + 1) / cols;
-      const v0 = r / rows, v1 = (r + 1) / rows;
-      const p00 = applyHomography(h, u0, v0);
-      const p10 = applyHomography(h, u1, v0);
-      const p01 = applyHomography(h, u0, v1);
-      const p11 = applyHomography(h, u1, v1);
-      const center = applyHomography(h, (u0 + u1) / 2, (v0 + v1) / 2);
-      centers.push(center);
-      const cellW = Math.min(
-        Math.hypot(p10.x - p00.x, p10.y - p00.y),
-        Math.hypot(p11.x - p01.x, p11.y - p01.y),
-      );
-      const cellH = Math.min(
-        Math.hypot(p01.x - p00.x, p01.y - p00.y),
-        Math.hypot(p11.x - p10.x, p11.y - p10.y),
-      );
-      const s = Math.max(2, Math.floor(Math.min(cellW, cellH) * inset * 0.5));
-      cellMin = Math.min(cellMin, s);
-      const x0 = Math.max(0, Math.floor(center.x - s));
-      const y0 = Math.max(0, Math.floor(center.y - s));
-      const x1 = Math.min(width, Math.ceil(center.x + s));
-      const y1 = Math.min(height, Math.ceil(center.y + s));
-      patchRects.push({ x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) });
-      let sr = 0, sg = 0, sb = 0, n = 0;
-      let isClipped = false;
-      for (let y = y0; y < y1; y++) {
-        for (let x = x0; x < x1; x++) {
-          const i = (y * width + x) * 4;
-          const rr = pixels[i], gg = pixels[i + 1], bb = pixels[i + 2];
-          if (!Number.isFinite(rr) || !Number.isFinite(gg) || !Number.isFinite(bb)) continue;
-          if (rr >= 0.995 || gg >= 0.995 || bb >= 0.995) isClipped = true;
-          sr += rr; sg += gg; sb += bb; n++;
-        }
+  let cellSize = Infinity;
+
+  for (const cell of cells) {
+    centers.push(cell.center);
+    sampleQuads.push(cell.sampleQuad);
+    const xs = cell.sampleQuad.map((p) => p.x);
+    const ys = cell.sampleQuad.map((p) => p.y);
+    const x0 = Math.max(0, Math.floor(Math.min(...xs)));
+    const y0 = Math.max(0, Math.floor(Math.min(...ys)));
+    const x1 = Math.min(width, Math.ceil(Math.max(...xs)));
+    const y1 = Math.min(height, Math.ceil(Math.max(...ys)));
+    patchRects.push({ x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) });
+
+    const cellEdges = [
+      Math.hypot(cell.cellQuad[1].x - cell.cellQuad[0].x, cell.cellQuad[1].y - cell.cellQuad[0].y),
+      Math.hypot(cell.cellQuad[2].x - cell.cellQuad[1].x, cell.cellQuad[2].y - cell.cellQuad[1].y),
+    ];
+    cellSize = Math.min(cellSize, Math.min(...cellEdges));
+
+    const rs: number[] = [];
+    const gs: number[] = [];
+    const bs: number[] = [];
+    let clippedPixels = 0;
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        if (!pointInQuad(x + 0.5, y + 0.5, cell.sampleQuad)) continue;
+        const i = (y * width + x) * 4;
+        const rr = pixels[i], gg = pixels[i + 1], bb = pixels[i + 2];
+        if (!Number.isFinite(rr) || !Number.isFinite(gg) || !Number.isFinite(bb)) continue;
+        // Post-WB values can legitimately exceed 1 after channel gains. Only
+        // call a pixel clipped when every channel is at the sensor ceiling;
+        // the pre-WB WB pass catches channel-specific clipping separately.
+        if (rr >= 0.995 && gg >= 0.995 && bb >= 0.995) clippedPixels++;
+        rs.push(rr); gs.push(gg); bs.push(bb);
       }
-      if (!n) {
-        samples.push([0, 0, 0]);
-        clipped.push(true);
-        valid.push(false);
-        continue;
-      }
-      const mean: [number, number, number] = [sr / n, sg / n, sb / n];
-      samples.push(mean);
-      clipped.push(isClipped);
-      valid.push(!isClipped && Math.max(...mean) > 0.002 && Math.max(...mean) < 0.995);
     }
+    const n = rs.length;
+    pixelCounts.push(n);
+    clippedFractions.push(n ? clippedPixels / n : 0);
+    if (!n) {
+      samples.push([0, 0, 0]);
+      clipped.push(false);
+      reasons.push('outside');
+      valid.push(false);
+      continue;
+    }
+    const mean: [number, number, number] = [trimmedMean(rs), trimmedMean(gs), trimmedMean(bs)];
+    const isClipped = clippedPixels / n > 0.01;
+    let reason: ColorCheckerSampleReason | undefined;
+    if (isClipped) reason = 'clipped';
+    else if (!mean.every((v) => Number.isFinite(v))) reason = 'nan';
+    else if (Math.max(...mean) <= 0.002) reason = 'dark';
+    samples.push(mean);
+    clipped.push(isClipped);
+    reasons.push(reason);
+    valid.push(!reason);
   }
-  return { samples, centers, patchRects, clipped, valid, cellSize: cellMin };
+  return {
+    samples,
+    centers,
+    sampleQuads,
+    patchRects,
+    clipped,
+    clippedFractions,
+    pixelCounts,
+    reasons,
+    valid,
+    cellSize: Number.isFinite(cellSize) ? cellSize : 0,
+  };
 }

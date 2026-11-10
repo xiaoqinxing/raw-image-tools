@@ -11,11 +11,13 @@ import type {
   Rect,
   StageId,
   ColorCheckerSession,
+  ColorCheckerFitSettings,
   RenderStats,
   BareRawConfig,
   ProjectFile,
   Domain,
 } from '../core/types';
+import { defaultColorCheckerSettings } from '../core/colorchecker/settings';
 
 export type ToolMode = 'pan' | 'roi' | 'colorchecker' | 'crop' | 'gray';
 export type AnalysisTab = AnalysisKind | 'diff';
@@ -33,6 +35,8 @@ export interface ImageDoc {
   snapshots: PipelineSnapshot[];
   flat: FlatField | null;
   colorChecker: ColorCheckerSession;
+  /** Ephemeral ColorChecker fit settings; not written to project files. */
+  colorCheckerSettings: ColorCheckerFitSettings;
   decodeMs: number;
   status: 'loading' | 'ready' | 'error';
   error?: string;
@@ -62,6 +66,8 @@ interface State {
   analysisStage: StageId;
   tool: ToolMode;
   analysisTab: AnalysisTab;
+  /** Whether the analysis dock is collapsed; the canvas sample overlay follows this. */
+  analysisCollapsed: boolean;
   viewport: Viewport;
   falseColor: boolean;
   showClipping: boolean;
@@ -98,6 +104,7 @@ interface State {
   setSnapshots: (id: string, snapshots: PipelineSnapshot[]) => void;
   setFlat: (id: string, flat: FlatField | null) => void;
   setColorChecker: (id: string, cc: ColorCheckerSession) => void;
+  setColorCheckerSettings: (id: string, settings: ColorCheckerFitSettings) => void;
   setAnalysis: (id: string, result: AnalysisResult) => void;
   clearAnalysis: (id: string, kind?: AnalysisKind) => void;
   setRoi: (id: string, roi: Rect | null) => void;
@@ -119,6 +126,7 @@ interface State {
   setSelectedPresetId: (id: string | null) => void;
   setTool: (tool: ToolMode) => void;
   setAnalysisTab: (tab: AnalysisTab) => void;
+  setAnalysisCollapsed: (collapsed: boolean) => void;
   setFalseColor: (v: boolean) => void;
   setShowClipping: (v: boolean) => void;
   setSplit: (v: number) => void;
@@ -141,6 +149,7 @@ const initialState = {
   analysisStage: 'sharpen' as StageId,
   tool: 'pan' as ToolMode,
   analysisTab: 'histogram' as AnalysisTab,
+  analysisCollapsed: true,
   viewport: { width: 1, height: 1, dpr: 1 },
   falseColor: true,
   showClipping: false,
@@ -219,6 +228,7 @@ export const useStore = create<State>((set, get) => ({
   setSnapshots: (id, snapshots) => set((s) => (s.docs[id] ? { docs: { ...s.docs, [id]: { ...s.docs[id], snapshots } }, dirty: true } : s)),
   setFlat: (id, flat) => set((s) => (s.docs[id] ? { docs: { ...s.docs, [id]: { ...s.docs[id], flat } }, dirty: true } : s)),
   setColorChecker: (id, colorChecker) => set((s) => (s.docs[id] ? { docs: { ...s.docs, [id]: { ...s.docs[id], colorChecker } }, dirty: true } : s)),
+  setColorCheckerSettings: (id, colorCheckerSettings) => set((s) => (s.docs[id] ? { docs: { ...s.docs, [id]: { ...s.docs[id], colorCheckerSettings } } } : s)),
   setAnalysis: (id, result) =>
     set((s) => (s.docs[id] ? { docs: { ...s.docs, [id]: { ...s.docs[id], analysis: { ...s.docs[id].analysis, [result.kind]: result } } }, dirty: true } : s)),
   clearAnalysis: (id, kind) =>
@@ -254,6 +264,7 @@ export const useStore = create<State>((set, get) => ({
   setSelectedPresetId: (selectedPresetId) => set({ selectedPresetId }),
   setTool: (tool) => set({ tool }),
   setAnalysisTab: (analysisTab) => set({ analysisTab }),
+  setAnalysisCollapsed: (analysisCollapsed) => set({ analysisCollapsed }),
   setFalseColor: (falseColor) => set({ falseColor }),
   setShowClipping: (showClipping) => set({ showClipping }),
   setSplit: (split) => set({ split }),

@@ -10,6 +10,9 @@ import { computeNoiseSpectrum } from '../core/analysis/noise';
 import { computeDiff } from '../core/analysis/diff';
 import { cropForAnalysis } from '../core/analysis/crop';
 import { fitColorChecker } from '../core/colorchecker/fit';
+import { sampleColorCheckerGrid } from '../core/colorchecker/geometry';
+import { computeChartWb } from '../core/colorchecker/wb';
+import { normalizeColorCheckerObjective, normalizeColorCheckerTarget, normalizeColorCheckerWeights } from '../core/colorchecker/settings';
 import { paramsHash, STAGE_DOMAIN } from '../core/pipeline/params';
 import { rawSampleAt } from '../core/pipeline/cpu';
 import { displayRgb, toRgb8 } from '../core/color/display';
@@ -171,6 +174,27 @@ self.onmessage = async (event: MessageEvent<RenderWorkerRequest>) => {
       post({ type: 'grayPicked', requestId: msg.requestId, multipliers: mult, means, stage: r.result.stage });
       return;
     }
+    if (msg.type === 'chartWb') {
+      if (!raw) throw new Error('没有 RAW');
+      if (msg.corners.length !== 4) throw new Error('WB 计算需要四个角点');
+      if (msg.params.demosaic.bypass) throw new Error('WB 计算需要启用去马赛克');
+      const paramsWbOff = structuredClone(msg.params);
+      paramsWbOff.wb.bypass = true;
+      const r = renderer.renderPreview(paramsWbOff, 'demosaic', { display: false });
+      if (r.result.domain !== 'camera-rgb') throw new Error('WB 计算需要 camera RGB 阶段');
+      const pixels = renderer.readResult(r.result);
+      const corners = msg.corners.map((p) => ({ x: p.x * pixels.width, y: p.y * pixels.height })) as [
+        { x: number; y: number },
+        { x: number; y: number },
+        { x: number; y: number },
+        { x: number; y: number },
+      ];
+      const sampling = sampleColorCheckerGrid(pixels.data, pixels.width, pixels.height, corners, msg.inset ?? 0.5);
+      if (!sampling) throw new Error('色卡四角无效，无法计算 WB');
+      const result = computeChartWb(sampling.samples, sampling.valid);
+      post({ type: 'chartWb', requestId: msg.requestId, result });
+      return;
+    }
     if (msg.type === 'probePixel') {
       if (!raw) throw new Error('没有 RAW');
       const sampled = renderer.sampleDisplayed(msg.x, msg.y);
@@ -320,6 +344,9 @@ self.onmessage = async (event: MessageEvent<RenderWorkerRequest>) => {
           corners,
           referenceId: msg.options?.referenceId as string | undefined,
           inset: msg.options?.inset as number | undefined,
+          weights: normalizeColorCheckerWeights(msg.options?.weights),
+          target: normalizeColorCheckerTarget(msg.options?.target),
+          objective: normalizeColorCheckerObjective(msg.options?.objective),
         });
         const { warnings, ...rest } = fit;
         result = { ...rest, ...metaFor(warnings, null) } as AnalysisResult;

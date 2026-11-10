@@ -300,6 +300,27 @@ export interface ProbeSample {
   };
 }
 
+export interface ColorCheckerTarget {
+  /** Target chroma scale in percent; 100 keeps the standard reference. */
+  saturation: number;
+  /** Target hue rotation in degrees. */
+  hue: number;
+}
+
+export type ColorCheckerObjective = 'de00' | 'chroma';
+
+/** Ephemeral fit settings; deliberately not serialized with the project. */
+export interface ColorCheckerFitSettings {
+  /** 24 per-patch weights; 0 excludes a patch, 1 is normal, >1 emphasizes it. */
+  weights: number[];
+  target: ColorCheckerTarget;
+  objective: ColorCheckerObjective;
+  /** Run the four-neutral-patch WB estimate before fitting. */
+  autoWb: boolean;
+  /** Sample side length as a fraction of each cell (0.3..0.7). */
+  inset: number;
+}
+
 export interface ColorCheckerSession {
   corners: [Point, Point, Point, Point] | null;
   referenceId: string;
@@ -444,15 +465,48 @@ export interface MtfResult extends AnalysisMeta {
   edge: { angleDeg: number; contrast: number; oversampling: 4 };
 }
 
+export type ColorCheckerSampleReason = 'clipped' | 'dark' | 'nan' | 'outside';
+
+export interface ColorCheckerSample {
+  index: number;
+  /** Normalized to the active image (0..1). */
+  center: Point;
+  /** Actual averaged area, normalized to the active image. */
+  quad: [Point, Point, Point, Point];
+  weight: number;
+  valid: boolean;
+  reason?: ColorCheckerSampleReason;
+  meanRgb: [number, number, number];
+  pixelCount: number;
+}
+
+export interface ColorCheckerWbResult {
+  multipliers: Vec4;
+  means: Vec4;
+  validCount: number;
+  /** Relative spread of the per-patch R/G and B/G gains (0..1). */
+  spread: number;
+  patchIndices: number[];
+  warnings: string[];
+}
+
 export interface ColorCheckerPatchResult {
   index: number;
   name: string;
   refLab: [number, number, number];
   measuredLab: [number, number, number];
+  /** Reference before target saturation/hue adjustment. */
+  standardRefLab?: [number, number, number];
   dE00: number;
   dC: number;
+  dH?: number;
+  /** CIEDE2000 chroma+hue sub-error, excluding L*. */
+  dEChroma?: number;
+  dE00Standard?: number;
   clipped: boolean;
   used: boolean;
+  weight?: number;
+  invalidReason?: ColorCheckerSampleReason;
 }
 
 export interface ColorCheckerResult extends AnalysisMeta {
@@ -461,10 +515,23 @@ export interface ColorCheckerResult extends AnalysisMeta {
   meanDE00: number;
   maxDE00: number;
   meanAbsDC: number;
+  meanAbsDH?: number;
+  weightedMeanDE00?: number;
+  meanDE00Standard?: number;
+  maxDE00Standard?: number;
+  meanChromaError?: number;
   matrixTotal: Mat3;
   matrixCcm: Mat3;
   validCount: number;
-  method: 'ls' | 'de00-optimized';
+  usedCount?: number;
+  method: 'ls' | 'de00-optimized' | 'chroma-optimized';
+  objective?: ColorCheckerObjective;
+  targetSaturation?: number;
+  targetHue?: number;
+  weights?: number[];
+  gamutClippedCount?: number;
+  samples?: ColorCheckerSample[];
+  wb?: ColorCheckerWbResult;
 }
 
 export interface WaveformResult extends AnalysisMeta {

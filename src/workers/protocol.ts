@@ -39,6 +39,13 @@ export type RenderWorkerRequest =
   | { type: 'readStage'; requestId: string; source: 'preview' | 'full'; stage: import('../core/types').StageId; rect?: { x: number; y: number; w: number; h: number } }
   | { type: 'exportPng'; requestId: string; params: import('../core/types').PipelineParams; bitDepth: 8 | 16; crop: { x: number; y: number; w: number; h: number } | null; target: import('../core/types').StageId }
   | { type: 'pickGray'; requestId: string; params: import('../core/types').PipelineParams; point: { x: number; y: number }; radius?: number }
+  | {
+      type: 'chartWb';
+      requestId: string;
+      params: import('../core/types').PipelineParams;
+      corners: Array<{ x: number; y: number }>;
+      inset?: number;
+    }
   | { type: 'probePixel'; requestId: string; x: number; y: number; params: import('../core/types').PipelineParams; linearView?: boolean }
   | {
       type: 'analyze';
@@ -68,5 +75,6 @@ export type RenderWorkerEvent =
   | { type: 'exported'; requestId: string; data: Uint8Array; width: number; height: number; scaled: boolean }
   | { type: 'analysis'; requestId: string; result: import('../core/types').AnalysisResult }
   | { type: 'grayPicked'; requestId: string; multipliers: import('../core/types').Vec4; means: import('../core/types').Vec4; stage: import('../core/types').StageId }
+  | { type: 'chartWb'; requestId: string; result: import('../core/types').ColorCheckerWbResult }
   | { type: 'probePixel'; requestId: string; sample: import('../core/types').ProbeSample | null }
   | { type: 'error'; requestId?: string; message: string; stack?: string };

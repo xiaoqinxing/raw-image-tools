@@ -13,11 +13,12 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 
 | 套件 | 数量 | 结果 |
 |------|------|------|
-| Vitest 单元/数值 | 113 | 全部通过 |
+| Vitest 单元/数值 | 130 | 全部通过 |
 | Playwright E2E：DNG 导入 / 阶段 / 16-bit 导出 / 工程保存 | 1 | 通过 |
 | Playwright E2E：裸 RAW 导入 + 错误配置 | 1 | 通过 |
 | Playwright E2E：裸 RAW 黑白电平随位宽默认 | 1 | 通过 |
 | Playwright E2E：ColorChecker 四角 + CCM 拟合 | 1 | 通过 |
+| Playwright E2E：ColorChecker 取样框 + 权重 + a*b* 图 | 1 | 通过 |
 | Playwright E2E：差异指标 | 1 | 通过 |
 | Playwright E2E：工程 JSON 重开 + 重关联 | 1 | 通过 |
 | Playwright E2E：工程重关联同时附加平场 | 1 | 通过 |
@@ -32,7 +33,7 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 | Playwright E2E：Gamma 线性显示与锐化 SKIP | 1 | 通过 |
 | Playwright E2E：数字增益阶段 + CSC YUV 调整/色域标准 | 2 | 通过 |
 | Playwright E2E：ROI 默认全图 + 框选限制 | 1 | 通过 |
-| **E2E 合计** | **21** | **全部通过** |
+| **E2E 合计** | **22** | **全部通过** |
 
 覆盖的数值测试：
 
@@ -41,7 +42,7 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 - 裸 RAW：u16 LE/BE、左/右对齐、packed 10/12/14-bit LSB/MSB、MIPI RAW10/12/14、header/stride/active crop/CFA 相位、截断与非法电平。
 - 黑白电平默认：按位宽生成 1/16 满量程黑电平与 $2^{bits}-1$ 白电平（10-bit 64/1023，12-bit 256/4095）。
 - 分析 ROI 裁剪：预览坐标映射、raw-cfa 偶数像素对齐、无 ROI 时全图透传。
-- ColorChecker：透视网格采样 + 非对称相机矩阵往返；拟合 mean ΔE00 < 0.1（转置回归）。
+- ColorChecker：透视网格采样 + 非对称相机矩阵往返；拟合 mean ΔE00 < 0.1（转置回归）；曝光 ×0.6/×1.6、WB 偏 R1.3/B0.8 时仍 <0.1；逐块权重 0 不参与拟合；目标饱和度/色调与标准指标；底部四中性块 WB 不把不同灰度误判为光照不均。
 - 悬停读数：WB 乘数归一化为 R:G:B 比值、CFA G1/G2 折叠为 G。
 - 直方图：ROI 内 R/G/B 均值与 G=1 的 R/G、B/G 比例。
 - DNG：TIFF 标签解析、Black/White/AsShotNeutral/CFA/ActiveArea、LibRaw 解包。

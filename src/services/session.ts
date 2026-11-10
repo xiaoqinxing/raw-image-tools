@@ -69,11 +69,19 @@ export class ImageSession {
       this.callbacks.onError(msg.message);
       return;
     }
-    if (msg.type === 'pixels' || msg.type === 'exported' || msg.type === 'analysis' || msg.type === 'grayPicked' || msg.type === 'probePixel') {
+    if (msg.type === 'pixels' || msg.type === 'exported' || msg.type === 'analysis' || msg.type === 'grayPicked' || msg.type === 'probePixel' || msg.type === 'chartWb') {
       const p = this.pending.get(msg.requestId);
       if (p) {
         this.pending.delete(msg.requestId);
-        p.resolve(msg.type === 'analysis' ? msg.result : msg.type === 'probePixel' ? msg.sample : msg);
+        p.resolve(
+          msg.type === 'analysis'
+            ? msg.result
+            : msg.type === 'probePixel'
+              ? msg.sample
+              : msg.type === 'chartWb'
+                ? msg.result
+                : msg,
+        );
       }
     }
   }
@@ -151,6 +159,18 @@ export class ImageSession {
       this.pending.set(requestId, { resolve: resolve as (v: unknown) => void, reject });
       this.post({ type: 'pickGray', requestId, params, point, radius }).catch(reject);
     }) as Promise<{ multipliers: import('../core/types').Vec4; means: import('../core/types').Vec4; stage: StageId }>;
+  }
+
+  async computeChartWb(
+    params: PipelineParams,
+    corners: Array<{ x: number; y: number }>,
+    inset = 0.5,
+  ): Promise<import('../core/types').ColorCheckerWbResult> {
+    const requestId = `w${++this.seq}`;
+    return new Promise((resolve, reject) => {
+      this.pending.set(requestId, { resolve: resolve as (v: unknown) => void, reject });
+      this.post({ type: 'chartWb', requestId, params, corners, inset }).catch(reject);
+    }) as Promise<import('../core/types').ColorCheckerWbResult>;
   }
 
   async probePixel(params: PipelineParams, point: { x: number; y: number }, linearView = false): Promise<import('../core/types').ProbeSample | null> {

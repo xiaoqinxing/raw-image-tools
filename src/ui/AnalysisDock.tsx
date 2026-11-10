@@ -1,9 +1,12 @@
 import React from 'react';
 import { useActiveDoc, useStore, type AnalysisTab } from '../state/store';
-import { analyze, applyFittedCcm, fitColorChecker, renderActive } from '../services/editor';
-import type { AnalysisKind, AnalysisResult, ColorCheckerResult, HistogramResult, MtfResult, NoiseSpectrumResult, Rect, SnrResult, WaveformResult } from '../core/types';
-import { Button, Segmented } from './controls';
+import { analyze, applyChartWb, applyFittedCcm, fitColorChecker, renderActive } from '../services/editor';
+import type { AnalysisKind, AnalysisResult, ColorCheckerResult, ColorCheckerFitSettings, ColorCheckerSample, HistogramResult, MtfResult, NoiseSpectrumResult, Rect, SnrResult, WaveformResult } from '../core/types';
+import { Button, Segmented, SliderField, Toggle } from './controls';
 import { paramsHash } from '../core/pipeline/params';
+import { ColorCheckerABPlot } from './ColorCheckerABPlot';
+import { normalizeColorCheckerSettings } from '../core/colorchecker/settings';
+import { getReference, type ColorCheckerPatch } from '../core/color/colorchecker-data';
 
 const TABS: Array<{ id: AnalysisTab; label: string }> = [
   { id: 'histogram', label: '直方图' },
@@ -264,16 +267,129 @@ function SpectrumView({ result }: { result: NoiseSpectrumResult }) {
   );
 }
 
+const WEIGHT_PRESETS: Array<{ label: string; make: () => number[] }> = [
+  { label: '全部 1', make: () => Array.from({ length: 24 }, () => 1) },
+  { label: '中性优先', make: () => Array.from({ length: 24 }, (_, i) => (i >= 18 ? 2 : 1)) },
+  { label: '肤色优先', make: () => Array.from({ length: 24 }, (_, i) => (i <= 1 ? 2 : 1)) },
+  { label: '彩色优先', make: () => Array.from({ length: 24 }, (_, i) => (i < 18 ? 2 : 1)) },
+  { label: '排除暗块', make: () => Array.from({ length: 24 }, (_, i) => (i >= 21 ? 0 : 1)) },
+  { label: '仅中性', make: () => Array.from({ length: 24 }, (_, i) => (i >= 18 ? 1 : 0)) },
+];
+
+const SAMPLE_REASON_LABELS: Record<string, string> = {
+  clipped: '裁切',
+  dark: '欠曝',
+  nan: '非法',
+  outside: '越界',
+};
+
+function PatchWeightTable({
+  weights,
+  patches,
+  samples,
+  onWeight,
+}: {
+  weights: number[];
+  patches: ColorCheckerPatch[];
+  samples?: ColorCheckerSample[];
+  onWeight: (index: number, value: number) => void;
+}) {
+  return (
+    <div className="min-h-0 flex-1 overflow-auto scroll-thin">
+      <table className="w-full text-[11px]">
+        <thead className="sticky top-0 z-10 bg-ink-900 text-ink-500">
+          <tr className="text-left">
+            <th className="w-8 py-1">#</th>
+            <th className="py-1">色块</th>
+            <th className="w-16 py-1">取样</th>
+            <th className="w-20 py-1">权重</th>
+          </tr>
+        </thead>
+        <tbody className="mono">
+          {patches.map((patch, i) => {
+            const weight = weights[i] ?? 1;
+            const sample = samples?.[i];
+            const status = sample
+              ? sample.valid
+                ? '有效'
+                : SAMPLE_REASON_LABELS[sample.reason ?? ''] ?? '无效'
+              : '待拟合';
+            return (
+              <tr
+                key={i}
+                data-testid={`cc-weight-row-${i}`}
+                className={`border-t border-ink-700/60 ${weight <= 0 ? 'opacity-50' : ''}`}
+              >
+                <td className="py-0.5">{i + 1}</td>
+                <td className="py-0.5 font-sans text-ink-300">
+                  <span
+                    className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm border border-black/40 align-middle"
+                    style={{ backgroundColor: `rgb(${patch.srgb[0]}, ${patch.srgb[1]}, ${patch.srgb[2]})` }}
+                  />
+                  {patch.nameZh}
+                </td>
+                <td className={`py-0.5 ${sample && !sample.valid ? 'text-[#ff9a9a]' : 'text-ink-500'}`}>{status}</td>
+                <td className="py-0.5">
+                  <input
+                    className="input input-mono w-16 px-1 py-0.5 text-[10px]"
+                    type="number"
+                    min={0}
+                    max={4}
+                    step={0.1}
+                    value={weight}
+                    aria-label={`色块 ${i + 1} 权重`}
+                    onChange={(e) => onWeight(i, Number(e.target.value))}
+                  />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function ColorCheckerView({ result }: { result: ColorCheckerResult | null }) {
   const doc = useActiveDoc();
   const setColorChecker = useStore((s) => s.setColorChecker);
+  const setColorCheckerSettings = useStore((s) => s.setColorCheckerSettings);
   const setTool = useStore((s) => s.setTool);
   const tool = useStore((s) => s.tool);
+  const fitCreatedAt = doc?.colorChecker.fit?.createdAt ?? 0;
+  const [view, setView] = React.useState<'weights' | 'table' | 'ab'>(fitCreatedAt ? 'table' : 'weights');
+  const lastFitCreatedAt = React.useRef(fitCreatedAt);
+  React.useEffect(() => {
+    if (fitCreatedAt && fitCreatedAt !== lastFitCreatedAt.current) {
+      lastFitCreatedAt.current = fitCreatedAt;
+      setView('table');
+    }
+  }, [fitCreatedAt]);
   if (!doc) return null;
   const fit = result ?? doc.colorChecker.fit ?? null;
+  const referencePatches = getReference(doc.colorChecker.referenceId);
+  const settings = normalizeColorCheckerSettings(doc.colorCheckerSettings);
+  const updateSettings = (patch: Partial<ColorCheckerFitSettings>) =>
+    setColorCheckerSettings(doc.id, normalizeColorCheckerSettings({ ...settings, ...patch }));
+  const setWeight = (index: number, value: number) => {
+    const weights = [...settings.weights];
+    weights[index] = Math.max(0, Math.min(4, Number.isFinite(value) ? value : 1));
+    updateSettings({ weights });
+  };
+  const targetAdjusted = Math.abs(settings.target.saturation - 100) > 1e-9 || Math.abs(settings.target.hue) > 1e-9;
+  const showStandard = !!fit && (
+    targetAdjusted ||
+    (typeof fit.meanDE00Standard === 'number' && Math.abs(fit.meanDE00 - fit.meanDE00Standard) > 1e-6)
+  );
+  const settingsChanged = !!fit && (
+    Math.abs((fit.targetSaturation ?? 100) - settings.target.saturation) > 1e-9 ||
+    Math.abs((fit.targetHue ?? 0) - settings.target.hue) > 1e-9 ||
+    (fit.objective ?? 'de00') !== settings.objective ||
+    (fit.weights ?? []).some((w, i) => Math.abs(w - settings.weights[i]) > 1e-9)
+  );
   return (
     <div className="flex h-full flex-col gap-3 overflow-auto scroll-thin sm:flex-row sm:overflow-hidden">
-      <div className="w-full shrink-0 space-y-2 sm:w-[260px]">
+      <div className="w-full shrink-0 space-y-2 overflow-auto scroll-thin sm:w-[260px] sm:overflow-y-auto">
         <div className="field-label">参考版本</div>
         <select
           className="select w-full"
@@ -290,49 +406,129 @@ function ColorCheckerView({ result }: { result: ColorCheckerResult | null }) {
           <Button className="btn-xs" variant="primary" onClick={fitColorChecker} disabled={!doc.colorChecker.corners}>拟合 CCM</Button>
         </div>
         <div className="kv"><span>四角</span><span className="mono">{doc.colorChecker.corners?.length ?? 0}/4</span></div>
-        {fit ? (
-          <>
-            <div className="kv"><span>有效块</span><span className="mono">{fit.validCount}/24</span></div>
-            <div className="rounded border border-ink-700 p-2">
-              <div className="text-[11px] text-ink-500">mean ΔE00</div>
-              <div className="mono text-[20px]" style={{ color: fit.meanDE00 <= 2.5 ? '#7fe3ae' : '#ffca7a' }}>{fit.meanDE00.toFixed(3)}</div>
-              <div className="text-[11px] text-ink-500">max ΔE00</div>
-              <div className="mono text-[15px]" style={{ color: fit.maxDE00 <= 5 ? '#7fe3ae' : '#ffca7a' }}>{fit.maxDE00.toFixed(3)}</div>
-              <div className="mt-1 text-[11px] text-ink-500">mean |ΔC'| {fit.meanAbsDC.toFixed(3)}</div>
-              <div className="text-[11px] text-ink-500">{fit.method === 'de00-optimized' ? 'ΔE00 优化' : '最小二乘'}</div>
-            </div>
-            {fit.warnings.length ? (
-              <div className="rounded border border-[#5c4a24] bg-[#332713] px-2 py-1 text-[11px] leading-4 text-[#ffca7a]">
-                {fit.warnings.join(' · ')}
-              </div>
-            ) : null}
-            <Button className="btn-xs" variant="primary" onClick={applyFittedCcm}>应用 CCM 到管线</Button>
-          </>
-        ) : (
-          <div className="rounded border border-ink-700 p-2 text-[11px] leading-4 text-ink-500">
-            点击“四角框选”后，在画布上依次点选色卡四角（TL / TR / BR / BL），再点“拟合 CCM”。
+
+        <div className="rounded border border-ink-700 p-2">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="field-label">拟合目标</span>
+            <Segmented
+              value={settings.objective}
+              onChange={(v) => updateSettings({ objective: v })}
+              options={[{ value: 'de00', label: '色准' }, { value: 'chroma', label: '色度优先' }]}
+            />
           </div>
-        )}
+          <div className="text-[10px] leading-4 text-ink-500">色度优先 = ΔC00+ΔH00 为主，L* 只做弱约束。</div>
+          <SliderField label="目标饱和度" testId="cc-target-saturation" value={settings.target.saturation} min={0} max={200} unit="%" onChange={(v) => updateSettings({ target: { ...settings.target, saturation: v } })} />
+          <SliderField label="目标色调" testId="cc-target-hue" value={settings.target.hue} min={-60} max={60} unit="°" onChange={(v) => updateSettings({ target: { ...settings.target, hue: v } })} />
+          <SliderField label="取样内缩" testId="cc-target-inset" value={Math.round(settings.inset * 100)} min={30} max={70} unit="%" onChange={(v) => updateSettings({ inset: v / 100 })} />
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <Toggle on={settings.autoWb} onChange={(v) => updateSettings({ autoWb: v })} label="拟合前按中性块校正 WB" />
+          </div>
+          <div className="mt-1 flex flex-wrap gap-1">
+            <Button className="btn-xs" onClick={applyChartWb} disabled={!doc.colorChecker.corners}>按色卡中性块设 WB</Button>
+          </div>
+          <div className="mt-1 text-[10px] leading-4 text-ink-500">使用底行中间四块（20–23：Neutral 8 / 6.5 / 5 / 3.5）。</div>
+        </div>
+
+        {!fit ? (
+          <div className="rounded border border-ink-700 p-2 text-[11px] leading-4 text-ink-500">
+            点击“四角框选”后，在画布上依次点选 24 色块区域的四角（不是卡片外框），再点“拟合 CCM”。取样框只在 ColorChecker 面板展开时显示。
+          </div>
+        ) : null}
       </div>
-      <div className="min-w-0 flex-1 overflow-auto scroll-thin">
+
+      <div className="flex min-h-[320px] min-w-0 flex-1 flex-col gap-2 sm:min-h-0 sm:overflow-hidden">
         {fit ? (
-          <table className="w-full text-[11px]">
-            <thead className="text-ink-500"><tr className="text-left"><th>#</th><th>色块</th><th>ΔE00</th><th>ΔC'</th><th>used</th></tr></thead>
-            <tbody className="mono">
-              {fit.patches.map((p, i) => (
-                <tr key={i} className="border-t border-ink-700/60">
-                  <td>{i + 1}</td>
-                  <td className="font-sans text-ink-300">{p.name}</td>
-                  <td style={{ color: p.dE00 > 5 ? '#ff9a9a' : p.dE00 > 2.5 ? '#ffca7a' : '#7fe3ae' }}>{p.dE00.toFixed(2)}</td>
-                  <td>{p.dC.toFixed(2)}</td>
-                  <td>{p.used ? '✓' : '—'}</td>
-                </tr>
+          <div className="shrink-0 rounded border border-ink-700 p-2" data-testid="cc-fit-summary">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-400">
+              <span>有效 <span className="mono text-ink-200">{fit.validCount}/24</span> · 参与 <span className="mono text-ink-200">{fit.usedCount ?? fit.validCount}</span></span>
+              <span>目标 mean <span className="mono text-[15px]" style={{ color: (fit.weightedMeanDE00 ?? fit.meanDE00) <= 2.5 ? '#7fe3ae' : '#ffca7a' }}>{(fit.weightedMeanDE00 ?? fit.meanDE00).toFixed(3)}</span></span>
+              <span>全块 <span className="mono text-ink-200">{fit.meanDE00.toFixed(3)}</span></span>
+              {showStandard ? <span>标准 <span className="mono text-ink-200">{fit.meanDE00Standard?.toFixed(3)}</span></span> : null}
+              <span>max <span className="mono" style={{ color: fit.maxDE00 <= 5 ? '#7fe3ae' : '#ffca7a' }}>{fit.maxDE00.toFixed(3)}</span></span>
+              <span>|ΔC'| <span className="mono text-ink-200">{fit.meanAbsDC.toFixed(3)}</span> · |ΔH'| <span className="mono text-ink-200">{(fit.meanAbsDH ?? 0).toFixed(3)}</span></span>
+              <span>{fit.method === 'chroma-optimized' ? '色度优先优化' : fit.method === 'de00-optimized' ? 'ΔE00 优化' : '最小二乘'}</span>
+              {fit.wb ? <span>WB <span className="mono text-ink-200">R {fit.wb.multipliers[0].toFixed(2)} / B {fit.wb.multipliers[3].toFixed(2)}</span></span> : null}
+              <Button className="btn-xs ml-auto" variant="primary" onClick={applyFittedCcm}>应用 CCM</Button>
+            </div>
+            {settingsChanged ? (
+              <div className="mt-1 text-[10px] leading-4 text-[#ffca7a]">权重或目标已改变，请重新拟合；当前结果使用旧设置。</div>
+            ) : null}
+            {fit.warnings.length ? (
+              <div className="mt-1 text-[10px] leading-4 text-[#ffca7a]">{fit.warnings.join(' · ')}</div>
+            ) : null}
+            <div className="mt-1 text-[10px] leading-4 text-ink-500">拟合矩阵与本次 WB/曝光绑定；换图或改曝光后请重新拟合。</div>
+          </div>
+        ) : null}
+        <div className="flex shrink-0 flex-wrap items-center gap-1">
+          <Button className="btn-xs" variant={view === 'weights' ? 'primary' : 'ghost'} onClick={() => setView('weights')}>权重表</Button>
+          <Button className="btn-xs" variant={view === 'table' ? 'primary' : 'ghost'} onClick={() => setView('table')} disabled={!fit}>色块表</Button>
+          <Button className="btn-xs" variant={view === 'ab' ? 'primary' : 'ghost'} onClick={() => setView('ab')} disabled={!fit}>a*b* 图</Button>
+          {view === 'weights' ? (
+            <select
+              className="select w-auto py-0.5 text-[10px]"
+              aria-label="权重预设"
+              value=""
+              onChange={(e) => {
+                const preset = WEIGHT_PRESETS.find((item) => item.label === e.target.value);
+                if (preset) updateSettings({ weights: preset.make() });
+              }}
+            >
+              <option value="">权重预设…</option>
+              {WEIGHT_PRESETS.map((preset) => (
+                <option key={preset.label} value={preset.label}>{preset.label}</option>
               ))}
-            </tbody>
-          </table>
-        ) : (
+            </select>
+          ) : null}
+          <span className="ml-auto text-[10px] text-ink-500">0=不参与 · 1=正常 · &gt;1=加强</span>
+        </div>
+        {view === 'weights' ? (
+          <PatchWeightTable
+            weights={settings.weights}
+            patches={referencePatches}
+            samples={fit?.samples}
+            onWeight={setWeight}
+          />
+        ) : !fit ? (
           <div className="flex h-full items-center justify-center text-center text-[11px] text-ink-500">
             尚未拟合。四角框选完成后点击“拟合 CCM”。
+          </div>
+        ) : view === 'ab' ? (
+          <ColorCheckerABPlot fit={fit} />
+        ) : (
+          <div className="min-h-0 flex-1 overflow-auto scroll-thin">
+            <table className="w-full text-[11px]">
+              <thead className="text-ink-500">
+                <tr className="text-left"><th>#</th><th>色块</th><th>权重</th><th>ΔE00</th><th>ΔC'</th><th>ΔH'</th>{showStandard ? <th>标准 ΔE</th> : null}<th>参与</th></tr>
+              </thead>
+              <tbody className="mono">
+                {fit.patches.map((p, i) => {
+                  const weight = settings.weights[i] ?? p.weight ?? 1;
+                  return (
+                    <tr key={i} className={`border-t border-ink-700/60 ${!p.used ? 'opacity-45' : ''}`}>
+                      <td>{i + 1}</td>
+                      <td className="font-sans text-ink-300">{p.name}</td>
+                      <td>
+                        <input
+                          className="input input-mono w-14 px-1 py-0.5 text-[10px]"
+                          type="number"
+                          min={0}
+                          max={4}
+                          step={0.1}
+                          value={weight}
+                          aria-label={`色块 ${i + 1} 权重`}
+                          onChange={(e) => setWeight(i, Number(e.target.value))}
+                        />
+                      </td>
+                      <td style={{ color: p.dE00 > 5 ? '#ff9a9a' : p.dE00 > 2.5 ? '#ffca7a' : '#7fe3ae' }}>{p.dE00.toFixed(2)}</td>
+                      <td>{p.dC.toFixed(2)}</td>
+                      <td>{(p.dH ?? 0).toFixed(2)}</td>
+                      {showStandard ? <td>{p.dE00Standard?.toFixed(2) ?? '—'}</td> : null}
+                      <td>{p.used ? '✓' : p.invalidReason ?? '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -379,7 +575,8 @@ export function AnalysisDock() {
   const doc = useActiveDoc();
   const tab = useStore((s) => s.analysisTab);
   const setTab = useStore((s) => s.setAnalysisTab);
-  const [collapsed, setCollapsed] = React.useState(true);
+  const collapsed = useStore((s) => s.analysisCollapsed);
+  const setCollapsed = useStore((s) => s.setAnalysisCollapsed);
   const analysisStage = useStore((s) => s.analysisStage);
   const setAnalysisStage = useStore((s) => s.setAnalysisStage);
   const tool = useStore((s) => s.tool);
@@ -439,7 +636,7 @@ export function AnalysisDock() {
   const result = tab === 'diff' ? doc.analysis.diff : doc.analysis[tab];
   const roi = doc.roi;
   return (
-    <div className={`analysis-dock flex flex-col border-t border-ink-700 bg-ink-900 ${collapsed ? 'is-collapsed' : ''}`}>
+    <div className={`analysis-dock flex flex-col border-t border-ink-700 bg-ink-900 ${collapsed ? 'is-collapsed' : ''} ${!collapsed && tab === 'colorchecker' ? 'is-colorchecker' : ''}`}>
       <div className="analysis-toolbar flex items-center border-b border-ink-700/70">
         <div className="analysis-tabs flex min-w-0 flex-1 items-center overflow-x-auto px-2 scroll-thin">
           {TABS.map((t) => (

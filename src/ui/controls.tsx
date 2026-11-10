@@ -60,6 +60,7 @@ export function SliderField({
   onChange,
   disabled,
   format,
+  testId,
 }: {
   label: string;
   value: number;
@@ -70,6 +71,7 @@ export function SliderField({
   onChange: (v: number) => void;
   disabled?: boolean;
   format?: (v: number) => string;
+  testId?: string;
 }) {
   return (
     <div className={disabled ? 'opacity-45' : ''}>
@@ -81,6 +83,8 @@ export function SliderField({
       </div>
       <SliderPrimitive.Root
         className="slider-root"
+        data-testid={testId}
+        aria-label={label}
         value={[value]}
         min={min}
         max={max}
@@ -91,7 +95,11 @@ export function SliderField({
         <SliderPrimitive.Track className="slider-track">
           <SliderPrimitive.Range className="slider-range" />
         </SliderPrimitive.Track>
-        <SliderPrimitive.Thumb className="slider-thumb" />
+        <SliderPrimitive.Thumb
+          className="slider-thumb"
+          data-testid={testId ? `${testId}-thumb` : undefined}
+          aria-label={label}
+        />
       </SliderPrimitive.Root>
     </div>
   );

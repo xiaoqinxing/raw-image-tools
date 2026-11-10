@@ -84,6 +84,27 @@ export interface DeltaE00Parts {
   dC: number;
   dH: number;
   dL: number;
+  /** CIEDE2000 chroma+hue sub-error, excluding the L* term. */
+  dEChroma: number;
+}
+
+export interface Lch {
+  L: number;
+  C: number;
+  /** Hue angle in degrees, 0..360. */
+  h: number;
+}
+
+export function labToLch(lab: Lab): Lch {
+  const C = Math.hypot(lab[1], lab[2]);
+  let h = (Math.atan2(lab[2], lab[1]) * 180) / Math.PI;
+  if (h < 0) h += 360;
+  return { L: lab[0], C, h };
+}
+
+export function lchToLab(lch: Lch): Lab {
+  const ring = (lch.h * Math.PI) / 180;
+  return [lch.L, lch.C * Math.cos(ring), lch.C * Math.sin(ring)];
 }
 
 export function deltaE00Parts(lab1: Lab, lab2: Lab): DeltaE00Parts {
@@ -147,7 +168,8 @@ export function deltaE00Parts(lab1: Lab, lab2: Lab): DeltaE00Parts {
   const tC = dCp / SC;
   const tH = dHp / SH;
   const dE00 = Math.sqrt(tL * tL + tC * tC + tH * tH + RT * tC * tH);
-  return { dE00, dC: dCp, dH: dHp, dL: dLp };
+  const dEChroma = Math.sqrt(Math.max(0, tC * tC + tH * tH + RT * tC * tH));
+  return { dE00, dC: dCp, dH: dHp, dL: dLp, dEChroma };
 }
 
 export function deltaE00(lab1: Lab, lab2: Lab): number {

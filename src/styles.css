@@ -68,6 +68,10 @@ html, body, #root {
   min-height: 170px;
   flex: 0 0 auto;
 }
+.analysis-dock.is-colorchecker {
+  height: clamp(300px, 38vh, 380px);
+  min-height: 260px;
+}
 .analysis-toolbar {
   height: 32px;
   min-height: 32px;
@@ -210,6 +214,10 @@ html, body, #root {
     height: clamp(230px, 32vh, 280px);
     min-height: 220px;
   }
+  .analysis-dock.is-colorchecker {
+    height: clamp(320px, 46vh, 440px);
+    min-height: 300px;
+  }
   .analysis-dock.is-collapsed {
     height: 32px;
     min-height: 32px;
@@ -262,6 +270,10 @@ html, body, #root {
   .analysis-dock {
     height: 190px;
     min-height: 170px;
+  }
+  .analysis-dock.is-colorchecker {
+    height: 250px;
+    min-height: 220px;
   }
   .analysis-dock.is-collapsed {
     height: 32px;

@@ -17,7 +17,10 @@ const CAMERA_FROM_SRGB: Mat3 = [
  * homography and a camera→sRGB transform, then verify the user-facing fit
  * path (sampling + LS + ΔE00 optimization) recovers it.
  */
-function makeChart(): { pixels: Float32Array; w: number; h: number; corners: [Point, Point, Point, Point] } {
+function makeChart(
+  exposure = 1,
+  wbGains: [number, number, number] = [1, 1, 1],
+): { pixels: Float32Array; w: number; h: number; corners: [Point, Point, Point, Point] } {
   const w = 640;
   const h = 440;
   const pixels = new Float32Array(w * h * 4);
@@ -36,7 +39,7 @@ function makeChart(): { pixels: Float32Array; w: number; h: number; corners: [Po
         srgbDecode(patch.srgb[1] / 255),
         srgbDecode(patch.srgb[2] / 255),
       ];
-      const cam = mul3Vec(CAMERA_FROM_SRGB, lin);
+      const cam = mul3Vec(CAMERA_FROM_SRGB, lin).map((v, i) => v * exposure * wbGains[i]) as [number, number, number];
       const u0 = (c + 0.04) / 6;
       const u1 = (c + 0.96) / 6;
       const v0 = (r + 0.04) / 4;
@@ -79,5 +82,75 @@ describe('ColorChecker fit path', () => {
     expect(result.matrixCcm[0]).toBeCloseTo(cameraToSrgb[0], 2);
     expect(result.matrixCcm[4]).toBeCloseTo(cameraToSrgb[4], 2);
     expect(result.matrixCcm[8]).toBeCloseTo(cameraToSrgb[8], 2);
+  });
+
+  it('is independent of chart exposure and residual WB gain', () => {
+    for (const [exposure, gains] of [
+      [0.6, [1, 1, 1]],
+      [1.6, [1, 1, 1]],
+      [1.0, [1.3, 1, 0.8]],
+    ] as Array<[number, [number, number, number]]>) {
+      const { pixels, w, h, corners } = makeChart(exposure, gains);
+      const result = fitColorChecker({
+        pixels,
+        width: w,
+        height: h,
+        corners,
+        inset: 0.5,
+      });
+      expect(result.meanDE00).toBeLessThan(0.1);
+      expect(result.maxDE00).toBeLessThan(0.5);
+    }
+  });
+
+  it('applies per-patch weights and ignores a zero-weight patch in the fit', () => {
+    const { pixels, w, h, corners } = makeChart();
+    const weights = Array.from({ length: 24 }, () => 1);
+    weights[23] = 0;
+    const result = fitColorChecker({
+      pixels,
+      width: w,
+      height: h,
+      corners,
+      inset: 0.5,
+      weights,
+    });
+    expect(result.usedCount).toBe(23);
+    expect(result.weights?.[23]).toBe(0);
+    expect(result.patches[23].used).toBe(false);
+    expect(result.meanDE00).toBeLessThan(0.1);
+  });
+
+  it('exposes adjusted targets and standard-reference metrics', () => {
+    const { pixels, w, h, corners } = makeChart();
+    const result = fitColorChecker({
+      pixels,
+      width: w,
+      height: h,
+      corners,
+      inset: 0.5,
+      target: { saturation: 120, hue: 8 },
+    });
+    expect(result.targetSaturation).toBe(120);
+    expect(result.targetHue).toBe(8);
+    expect(result.meanDE00Standard).toBeTypeOf('number');
+    expect(result.warnings.join(' ')).toContain('目标已调整');
+    expect(result.samples?.length).toBe(24);
+    expect(result.samples?.[0].quad.length).toBe(4);
+  });
+
+  it('reports the chroma-priority objective and components', () => {
+    const { pixels, w, h, corners } = makeChart();
+    const result = fitColorChecker({
+      pixels,
+      width: w,
+      height: h,
+      corners,
+      inset: 0.5,
+      objective: 'chroma',
+    });
+    expect(result.objective).toBe('chroma');
+    expect(result.meanChromaError).toBeTypeOf('number');
+    expect(result.patches[0].dEChroma).toBeTypeOf('number');
   });
 });

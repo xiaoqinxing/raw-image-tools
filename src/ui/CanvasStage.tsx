@@ -14,7 +14,7 @@ import {
   setViewport,
   zoomAt,
 } from '../services/editor';
-import { applyHomography, homographyFromCorners } from '../core/colorchecker/geometry';
+import { applyHomography, buildColorCheckerGrid, homographyFromCorners } from '../core/colorchecker/geometry';
 import type { Point, Rect } from '../core/types';
 import { linearPreviewFor, STAGE_ORDER, STAGE_SHORT_LABELS } from '../core/pipeline/params';
 import { Button } from './controls';
@@ -34,6 +34,8 @@ export function CanvasStage() {
   const flicker = useStore((s) => s.flicker);
   const split = useStore((s) => s.split);
   const showClipping = useStore((s) => s.showClipping);
+  const analysisTab = useStore((s) => s.analysisTab);
+  const analysisCollapsed = useStore((s) => s.analysisCollapsed);
   const setSelectedStage = useStore((s) => s.setSelectedStage);
   const setAnalysisStage = useStore((s) => s.setAnalysisStage);
   const setTool = useStore((s) => s.setTool);
@@ -149,6 +151,11 @@ export function CanvasStage() {
       }
     }
   }
+  const showCcOverlay = analysisTab === 'colorchecker' && !analysisCollapsed && !!ccCorners && ccCorners.length === 4;
+  const ccCells = showCcOverlay && ccCorners && ccCorners.length === 4
+    ? buildColorCheckerGrid(ccCorners as [Point, Point, Point, Point], doc.colorCheckerSettings?.inset ?? 0.5)
+    : null;
+  const fitSamples = doc.colorChecker.fit?.samples ?? null;
   const crop = doc.params.output.crop;
   const cropCss = crop ? rectToCss(crop) : null;
   const linearDisplay = linearPreviewFor(doc.params, selectedStage);
@@ -400,11 +407,50 @@ export function CanvasStage() {
       >
         <div ref={hostRef} className="absolute inset-0" />
         <svg className="overlay-svg">
-          {ccCss ? (
+          {showCcOverlay && ccCss ? (
             <g>
               <polygon points={ccCss.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#ffb85c" strokeWidth={1.5} />
-              {ccGrid.map(([a, b], i) => <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#ffb85c" strokeOpacity={0.55} strokeWidth={0.7} />)}
+              {ccGrid.map(([a, b], i) => <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#ffb85c" strokeOpacity={0.45} strokeWidth={0.7} />)}
               {ccCss.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={3} fill="#ffb85c" />)}
+              {ccCells?.map((cell) => {
+                const sample = fitSamples?.[cell.index];
+                const weight = sample?.weight ?? doc.colorCheckerSettings?.weights?.[cell.index] ?? 1;
+                const valid = sample?.valid ?? true;
+                const used = valid && weight > 0;
+                const points = cell.sampleQuad
+                  .map((p) => imageToCss(doc, viewport, p.x, p.y))
+                  .map((p) => `${p.x},${p.y}`)
+                  .join(' ');
+                const center = imageToCss(doc, viewport, cell.center.x, cell.center.y);
+                const stroke = !valid ? '#ff9a9a' : used ? '#5fd99a' : '#94a3b0';
+                const fill = !valid ? 'rgba(255,154,154,0.10)' : used ? 'rgba(95,217,154,0.10)' : 'rgba(148,163,176,0.06)';
+                const reason = sample?.reason;
+                return (
+                  <g key={cell.index}>
+                    <polygon
+                      data-testid={`cc-sample-${cell.index}`}
+                      points={points}
+                      fill={fill}
+                      stroke={stroke}
+                      strokeWidth={1}
+                      strokeDasharray={used ? undefined : '3 2'}
+                    />
+                    <text x={center.x} y={center.y - 1} textAnchor="middle" fill="#e7edf3" fontSize={9} fontFamily="monospace">
+                      {cell.index + 1}
+                    </text>
+                    {weight !== 1 ? (
+                      <text x={center.x} y={center.y + 9} textAnchor="middle" fill={used ? '#a8d2ff' : '#ffca7a'} fontSize={8} fontFamily="monospace">
+                        {weight <= 0 ? '0' : `×${weight.toFixed(1)}`}
+                      </text>
+                    ) : null}
+                    {!valid && reason ? (
+                      <text x={center.x} y={center.y + 9} textAnchor="middle" fill="#ff9a9a" fontSize={8} fontFamily="monospace">
+                        {reason === 'clipped' ? 'C' : reason === 'dark' ? 'D' : '!'}
+                      </text>
+                    ) : null}
+                  </g>
+                );
+              })}
             </g>
           ) : null}
           {roiCss ? (
@@ -430,8 +476,8 @@ export function CanvasStage() {
           ) : null}
         </svg>
         <div className="canvas-hint pointer-events-none absolute bottom-2 left-2 rounded bg-black/45 px-2 py-1 text-[11px] text-ink-300">
-          <span className="hidden sm:inline">{tool === 'pan' ? '拖拽平移 · 滚轮缩放 · 双击适配' : tool === 'roi' ? '拖拽框选分析 ROI · Esc 结束 · Alt+拖拽平移' : tool === 'gray' ? '点击灰点（平场校正后 RAW）' : tool === 'colorchecker' ? '依次点击色卡四角（TL/TR/BR/BL）' : '拖拽设置输出裁剪'}</span>
-          <span className="sm:hidden">{tool === 'pan' ? '拖拽平移 · 双击适配' : tool === 'roi' ? '拖拽框选 ROI · 可连续调整' : tool === 'gray' ? '点击灰点' : tool === 'colorchecker' ? '点选色卡四角' : '拖拽裁剪'}</span>
+          <span className="hidden sm:inline">{tool === 'pan' ? '拖拽平移 · 滚轮缩放 · 双击适配' : tool === 'roi' ? '拖拽框选分析 ROI · Esc 结束 · Alt+拖拽平移' : tool === 'gray' ? '点击灰点（平场校正后 RAW）' : tool === 'colorchecker' ? '点选 24 色块区域四角（TL/TR/BR/BL，不是卡片外框）' : '拖拽设置输出裁剪'}</span>
+          <span className="sm:hidden">{tool === 'pan' ? '拖拽平移 · 双击适配' : tool === 'roi' ? '拖拽框选 ROI · 可连续调整' : tool === 'gray' ? '点击灰点' : tool === 'colorchecker' ? '点 24 色块区域四角' : '拖拽裁剪'}</span>
         </div>
         <div className="pointer-events-none absolute left-2 top-2 max-w-[70%] truncate rounded bg-black/50 px-2 py-1 text-[11px] text-ink-300 sm:hidden">
           {doc.fileName} · {doc.meta.geometry.active.w}×{doc.meta.geometry.active.h}
