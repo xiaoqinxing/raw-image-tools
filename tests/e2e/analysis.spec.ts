@@ -96,7 +96,7 @@ test.describe('analysis scheduling and hover readout', () => {
 
   test('switching the viewed stage posts a single preview', async ({ page }) => {
     await clearMessages();
-    await page.locator('aside.app-right').getByRole('button', { name: 'CSC → 线性 sRGB' }).first().click();
+    await page.locator('aside.app-right').getByRole('button', { name: /CSC RGB/ }).first().click();
     await expect.poll(() => countMessages('renderPreview'), { timeout: 10_000 }).toBe(1);
     await page.waitForTimeout(500);
     expect(await countMessages('renderPreview')).toBe(1);

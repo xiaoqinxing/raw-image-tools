@@ -57,6 +57,7 @@ export function applyLevelsFlatWb(
         v *= applied;
       }
       if (!params.wb.bypass) v *= wb[ch] ?? 1;
+      if (!params.digitalGain.bypass) v *= params.digitalGain.global;
       data[y * active.w + x] = v;
     }
   }

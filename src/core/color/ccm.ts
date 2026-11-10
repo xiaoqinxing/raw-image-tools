@@ -1,5 +1,5 @@
 import type { ColorCheckerPatchResult, Mat3 } from '../types';
-import { ccmFromTotal, inverse3, isMat3, mul3Vec, transpose3 } from './matrices';
+import { inverse3, isMat3, mul3Vec, transpose3 } from './matrices';
 import { deltaE00Parts, linearSrgbToLab, type Lab } from './lab';
 import type { ColorCheckerPatch } from './colorchecker-data';
 
@@ -8,7 +8,6 @@ export interface CcmFitInput {
   referenceSrgb: Array<[number, number, number]>;
   valid?: boolean[];
   patches?: ColorCheckerPatch[];
-  csc: Mat3;
 }
 
 export interface CcmFitResult {
@@ -216,11 +215,8 @@ export function fitCcm(input: CcmFitInput): CcmFitResult {
     warnings.push(`ΔE00 优化失败，保留最小二乘解：${e instanceof Error ? e.message : String(e)}`);
   }
 
-  const inv = inverse3(input.csc);
-  if (!inv) throw new Error('CSC 矩阵不可逆，无法推导 CCM');
-  const ccm = ccmFromTotal(chosen, input.csc);
-  if (!ccm) throw new Error('CCM 推导失败');
-
+  // In v2 the CCM stage directly holds the camera profile
+  // (camera RGB -> linear sRGB), so the fitted total matrix is the CCM.
   const patches: ColorCheckerPatchResult[] = [];
   let sum = 0;
   let max = 0;
@@ -256,7 +252,7 @@ export function fitCcm(input: CcmFitInput): CcmFitResult {
 
   return {
     matrixTotal: chosen,
-    matrixCcm: ccm,
+    matrixCcm: chosen,
     patches,
     meanDE00: count ? sum / count : 0,
     maxDE00: max,

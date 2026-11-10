@@ -125,8 +125,7 @@ export async function runPipelineBenchmark(options: BenchOptions): Promise<Bench
   params.denoise.radius = 3;
   params.sharpen.bypass = false;
   params.sharpen.amount = 60;
-  params.csc.source = 'identity';
-  params.csc.matrix = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+  params.csc.bypass = false;
 
   const scale = Math.min(1600 / width, 1000 / height);
   const view = {

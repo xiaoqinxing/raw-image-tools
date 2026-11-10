@@ -5,7 +5,6 @@ import { computeMtf } from '../../src/core/analysis/mtf';
 import { computeNoiseSpectrum } from '../../src/core/analysis/noise';
 import { computeDiff } from '../../src/core/analysis/diff';
 import { fitCcm } from '../../src/core/color/ccm';
-import { IDENTITY3 } from '../../src/core/color/matrices';
 import { linearSrgbToLab, srgbDecode, srgbEncode } from '../../src/core/color/lab';
 import { COLOR_CHECKER_CLASSIC_24 } from '../../src/core/color/colorchecker-data';
 
@@ -124,7 +123,7 @@ describe('analysis', () => {
       ];
     });
     const reference = patches.map((p) => p.srgb.map((v) => srgbDecode(v / 255)) as [number, number, number]);
-    const fit = fitCcm({ camera, referenceSrgb: reference, patches, csc: IDENTITY3 });
+    const fit = fitCcm({ camera, referenceSrgb: reference, patches });
     expect(fit.meanDE00).toBeLessThan(1.0);
     expect(fit.maxDE00).toBeLessThan(3.0);
   });

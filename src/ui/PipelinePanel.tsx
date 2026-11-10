@@ -1,6 +1,8 @@
 import React from 'react';
 import { useActiveDoc, useStore } from '../state/store';
-import { STAGE_LABELS, STAGE_ORDER, effectiveCsc, stageIsActive } from '../core/pipeline/params';
+import { STAGE_LABELS, STAGE_ORDER, effectiveCscTransform, stageIsActive } from '../core/pipeline/params';
+import { deriveCscFromDng } from '../core/color/matrices';
+import { CSC_STANDARD_LABELS, CSC_STANDARDS } from '../core/color/yuv';
 import { applyFittedCcm, attachFlat, renderActive, updateStageAndRender, setStageBypassAndRender, fitColorChecker, savePreset, applyPreset, exportPresets, importPresets, deletePreset } from '../services/editor';
 import { Button, NumberField, Section, Segmented, SliderField, Toggle } from './controls';
 import type { Mat3, StageId, Vec4 } from '../core/types';
@@ -11,7 +13,7 @@ function StageRow({ stage, index }: { stage: StageId; index: number }) {
   const selectedStage = useStore((s) => s.selectedStage);
   const setSelectedStage = useStore((s) => s.setSelectedStage);
   const setAnalysisStage = useStore((s) => s.setAnalysisStage);
-  const [open, setOpen] = React.useState(stage === 'levels' || stage === 'wb' || stage === 'demosaic' || stage === 'ccm' || stage === 'csc');
+  const [open, setOpen] = React.useState(stage === 'levels' || stage === 'wb' || stage === 'digitalGain' || stage === 'demosaic' || stage === 'ccm' || stage === 'csc');
   if (!doc) return null;
   const p = doc.params[stage] as { bypass: boolean };
   const runnable = stageIsActive(doc.params, stage, !!doc.flat);
@@ -161,6 +163,25 @@ function StageControls({ stage }: { stage: StageId }) {
       </div>
     );
   }
+  if (stage === 'digitalGain') {
+    return (
+      <div className="space-y-2">
+        <SliderField
+          label="增益"
+          value={doc.params.digitalGain.global}
+          min={0}
+          max={8}
+          step={0.01}
+          format={(v) => `${v.toFixed(2)}×`}
+          onChange={(v) => updateStageAndRender('digitalGain', { global: v })}
+        />
+        <div className="flex gap-2">
+          <Button className="btn-xs" onClick={() => updateStageAndRender('digitalGain', { global: 1 })}>重置 1×</Button>
+        </div>
+        <div className="text-[11px] leading-4 text-ink-500">全局数字增益，在 WB 之后、去马赛克之前作用于 RAW CFA。默认 BYP 以避免额外 GPU pass。</div>
+      </div>
+    );
+  }
   if (stage === 'demosaic') {
     return (
       <div className="space-y-2">
@@ -202,42 +223,60 @@ function StageControls({ stage }: { stage: StageId }) {
     );
   }
   if (stage === 'ccm') {
+    const deriveFromDng = () => {
+      const profile = deriveCscFromDng(doc.meta.color);
+      const identity = profile.source === 'identity';
+      updateStageAndRender('ccm', {
+        matrix: profile.matrix,
+        source: identity ? 'identity' : 'dng',
+      });
+    };
     return (
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <span className="field-label">3×3 相机 RGB 校正</span>
+          <span className="field-label">相机 RGB → 线性 sRGB</span>
           <span className="badge">{doc.params.ccm.source}</span>
         </div>
         <MatrixEditor value={doc.params.ccm.matrix} onChange={(m) => updateStageAndRender('ccm', { matrix: m, source: 'manual' })} />
         <div className="flex flex-wrap gap-1">
           <Button className="btn-xs" onClick={() => updateStageAndRender('ccm', { matrix: [...IDENTITY3] as Mat3, source: 'identity' })}>单位阵</Button>
-          <Button className="btn-xs" onClick={() => updateStageAndRender('ccm', { matrix: effectiveCsc(doc.params), source: 'fit' })}>复制 CSC</Button>
+          <Button className="btn-xs" onClick={deriveFromDng}>从 DNG 推导</Button>
           {doc.colorChecker.fit ? <Button className="btn-xs" variant="primary" onClick={applyFittedCcm}>应用拟合 CCM</Button> : null}
         </div>
         {doc.colorChecker.fit ? (
           <div className="kv"><span>拟合 ΔE00</span><span className="mono">mean {doc.colorChecker.fit.meanDE00.toFixed(2)} / max {doc.colorChecker.fit.maxDE00.toFixed(2)}</span></div>
         ) : null}
-        <div className="text-[11px] leading-4 text-ink-500">CCM 在相机 RGB 域。最终 total = CSC × CCM；拟合时先求 camera→linear sRGB 总矩阵，再反解 CCM。</div>
+        <div className="text-[11px] leading-4 text-ink-500">CCM 现在是相机 Profile：相机 RGB → 线性 sRGB。ColorChecker 拟合直接得到该矩阵。</div>
+        {doc.meta.color?.warnings?.length ? <div className="text-[11px] leading-4 text-[#ffca7a]">{doc.meta.color.warnings.slice(0, 3).join(' ')}</div> : null}
       </div>
     );
   }
   if (stage === 'csc') {
+    const transform = effectiveCscTransform(doc.params);
     return (
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <span className="field-label">相机 RGB → 线性 sRGB</span>
-          <span className="badge">{doc.params.csc.source}</span>
+          <span className="field-label">RGB → YUV 调整（Gamma 域）</span>
+          <span className="badge">{CSC_STANDARD_LABELS[doc.params.csc.standard]}</span>
         </div>
-        <MatrixEditor value={doc.params.csc.matrix} onChange={(m) => updateStageAndRender('csc', { matrix: m, source: 'manual' })} />
+        <Segmented
+          value={doc.params.csc.standard}
+          onChange={(v) => updateStageAndRender('csc', { standard: v as typeof doc.params.csc.standard })}
+          options={CSC_STANDARDS.map((s) => ({ value: s, label: CSC_STANDARD_LABELS[s] }))}
+        />
+        <SliderField label="饱和度" value={doc.params.csc.saturation} min={0} max={200} unit="%" onChange={(v) => updateStageAndRender('csc', { saturation: v })} />
+        <SliderField label="对比度" value={doc.params.csc.contrast} min={0} max={200} unit="%" onChange={(v) => updateStageAndRender('csc', { contrast: v })} />
+        <SliderField label="色调" value={doc.params.csc.hue} min={-180} max={180} unit="°" onChange={(v) => updateStageAndRender('csc', { hue: v })} />
+        <SliderField label="亮度" value={doc.params.csc.brightness} min={-100} max={100} onChange={(v) => updateStageAndRender('csc', { brightness: v })} />
+        <div>
+          <div className="field-label mb-1">合成矩阵</div>
+          <div className="mono whitespace-pre-wrap text-[10px] leading-4 text-ink-500">{matrixToString(transform.matrix, 4)}</div>
+        </div>
+        <div className="kv"><span>offset</span><span className="mono">{transform.offset.map((v) => v.toFixed(4)).join(' / ')}</span></div>
         <div className="flex flex-wrap gap-1">
-          <Button className="btn-xs" onClick={() => {
-            const csc = effectiveCsc(doc.params);
-            updateStageAndRender('csc', { matrix: csc, source: 'dng' });
-          }}>从 DNG 推导</Button>
-          <Button className="btn-xs" onClick={() => updateStageAndRender('csc', { matrix: [...IDENTITY3] as Mat3, source: 'identity' })}>单位阵</Button>
+          <Button className="btn-xs" onClick={() => updateStageAndRender('csc', { saturation: 100, contrast: 100, hue: 0, brightness: 0 })}>重置调整</Button>
         </div>
-        <div className="mono whitespace-pre-wrap text-[10px] leading-4 text-ink-500">{matrixToString(doc.params.csc.matrix, 4)}</div>
-        {doc.meta.color?.warnings?.length ? <div className="text-[11px] leading-4 text-[#ffca7a]">{doc.meta.color.warnings.slice(0, 3).join(' ')}</div> : null}
+        <div className="text-[11px] leading-4 text-ink-500">CSC 在 Gamma 编码域做 RGB→YUV→调整→RGB，合成一个 3×3 + offset pass；矩阵由色域标准和四个调整项决定，不可手改。</div>
       </div>
     );
   }

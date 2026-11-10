@@ -14,7 +14,7 @@ import type {
   Rect,
   StageId,
 } from '../core/types';
-import { createDefaultParams, bypassStage, toPresetParams, fromPresetParams, paramsHash, linearPreviewFor } from '../core/pipeline/params';
+import { createDefaultParams, bypassStage, toPresetParams, fromPresetParams, paramsHash, linearPreviewFor, migrateParams } from '../core/pipeline/params';
 import { getReference } from '../core/color/colorchecker-data';
 import { decodeService, DecodeError } from './decode';
 import { ImageSession, stripFlat, stripRaw } from './session';
@@ -307,7 +307,7 @@ export function renderActive(): void {
     const snap = state.abSnapshotId ? doc.snapshots.find((s) => s.id === state.abSnapshotId) : null;
     if (snap) {
       const mode = state.flicker ? 3 : state.diffMode ? 2 : 1;
-      compare = { paramsB: snap.params, targetB: state.selectedStage, mode };
+      compare = { paramsB: migrateParams(snap.params), targetB: state.selectedStage, mode };
     }
   }
   if (state.diffMode && !compare) {
@@ -473,7 +473,7 @@ export async function analyze(kind: AnalysisKind, options?: Record<string, unkno
       let targetB: StageId = stage;
       if (state.abMode === 'snapshot' && state.abSnapshotId) {
         const snap = doc.snapshots.find((s) => s.id === state.abSnapshotId);
-        if (snap) paramsB = snap.params;
+        if (snap) paramsB = migrateParams(snap.params);
       }
       extra = { ...extra, paramsB, targetB, gain: 6, signed: false };
     }
@@ -589,7 +589,7 @@ export function applySnapshot(id: string): void {
   if (!doc) return;
   const snap = doc.snapshots.find((s) => s.id === id);
   if (!snap) return;
-  state.setParams(doc.id, structuredClone(snap.params));
+  state.setParams(doc.id, migrateParams(snap.params));
   renderActive();
 }
 
@@ -606,7 +606,7 @@ export function savePreset(): void {
   if (!name) return;
   const preset: Preset = {
     schema: 'rawlab.preset',
-    version: 1,
+    version: 2,
     id: `p${Date.now().toString(36)}`,
     name,
     createdAt: new Date().toISOString(),
@@ -625,7 +625,7 @@ export async function deletePreset(id: string): Promise<void> {
 
 export function exportPresets(): void {
   const presets = useStore.getState().presets;
-  const blob = new Blob([JSON.stringify({ schema: 'rawlab.presets', version: 1, presets }, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify({ schema: 'rawlab.presets', version: 2, presets }, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = 'rawlab-presets.json'; a.click();
@@ -698,7 +698,7 @@ export function buildProject(): ProjectFile {
   const active = state.activeId ? state.docs[state.activeId] : null;
   return {
     schema: 'rawlab.project',
-    version: 1,
+    version: 2,
     appVersion: '0.1.0',
     createdAt: new Date().toISOString(),
     modifiedAt: new Date().toISOString(),
@@ -750,7 +750,8 @@ export function saveProject(): void {
 export async function openProjectFile(file: File): Promise<void> {
   try {
     const project = JSON.parse(await file.text()) as ProjectFile;
-    if (project.schema !== 'rawlab.project' || project.version !== 1) throw new Error('不是 RAW Lab 工程文件（schema/version 不匹配）');
+    const version = (project as unknown as { version?: number }).version ?? 0;
+    if (project.schema !== 'rawlab.project' || (version !== 1 && version !== 2)) throw new Error('不是 RAW Lab 工程文件（schema/version 不匹配）');
     if (!Array.isArray(project.images) || !project.images.length) throw new Error('工程不含图像');
     useStore.getState().setPendingProject(project);
     useStore.getState().setProjectName(file.name.replace(/\.rawlab\.json$/i, '') || '已加载工程');
@@ -781,8 +782,8 @@ export async function relinkProjectImage(projectImage: ProjectImage, file: File,
   await createSessionForRaw(raw, flat);
   const doc = makeDoc(raw, 0, flat);
   doc.bareConfig = projectImage.bareConfig;
-  doc.params = structuredClone(projectImage.params);
-  doc.snapshots = structuredClone(projectImage.snapshots ?? []);
+  doc.params = migrateParams(projectImage.params);
+  doc.snapshots = (projectImage.snapshots ?? []).map((s) => ({ ...structuredClone(s), params: migrateParams(s.params) }));
   doc.colorChecker = structuredClone(projectImage.colorChecker ?? { corners: null, referenceId: 'classic24-pre2014-d65' });
   doc.roi = projectImage.roi ?? legacyRoi(projectImage.rois);
   doc.probes = structuredClone(projectImage.probes ?? []);

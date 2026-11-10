@@ -62,22 +62,22 @@ function makeChart(): { pixels: Float32Array; w: number; h: number; corners: [Po
 describe('ColorChecker fit path', () => {
   it('recovers a perspective-corrected chart through a non-symmetric camera matrix', () => {
     const { pixels, w, h, corners } = makeChart();
-    const csc = inverse3(CAMERA_FROM_SRGB)!;
     const result = fitColorChecker({
       pixels,
       width: w,
       height: h,
       corners,
-      csc,
       referenceId: 'classic24-pre2014-d65',
       inset: 0.5,
     });
     expect(result.validCount).toBeGreaterThanOrEqual(20);
     expect(result.meanDE00).toBeLessThan(0.1);
     expect(result.maxDE00).toBeLessThan(0.5);
-    // The fitted CCM (after removing the known CSC) should be near identity.
-    expect(result.matrixCcm[0]).toBeCloseTo(1, 2);
-    expect(result.matrixCcm[4]).toBeCloseTo(1, 2);
-    expect(result.matrixCcm[8]).toBeCloseTo(1, 2);
+    // CCM now directly holds the camera -> linear sRGB profile. The synthetic
+    // chart applies CAMERA_FROM_SRGB as sRGB -> camera, so the fit recovers its inverse.
+    const cameraToSrgb = inverse3(CAMERA_FROM_SRGB)!;
+    expect(result.matrixCcm[0]).toBeCloseTo(cameraToSrgb[0], 2);
+    expect(result.matrixCcm[4]).toBeCloseTo(cameraToSrgb[4], 2);
+    expect(result.matrixCcm[8]).toBeCloseTo(cameraToSrgb[8], 2);
   });
 });

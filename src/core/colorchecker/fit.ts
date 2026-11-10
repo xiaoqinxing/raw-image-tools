@@ -1,4 +1,4 @@
-import type { ColorCheckerResult, Mat3, Point } from '../types';
+import type { ColorCheckerResult, Point } from '../types';
 import { fitCcm } from '../color/ccm';
 import { getReference } from '../color/colorchecker-data';
 import { srgbDecode } from '../color/lab';
@@ -9,7 +9,6 @@ export interface ColorCheckerFitInput {
   width: number;
   height: number;
   corners: [Point, Point, Point, Point];
-  csc: Mat3;
   referenceId?: string;
   inset?: number;
 }
@@ -29,7 +28,6 @@ export function fitColorChecker(input: ColorCheckerFitInput): Omit<ColorCheckerR
     referenceSrgb: referenceLinear,
     patches,
     valid,
-    csc: input.csc,
   });
   return {
     kind: 'colorchecker',

@@ -7,7 +7,7 @@ import type {
   StageId,
   Vec4,
 } from '../core/types';
-import { STAGE_DOMAIN, STAGE_ORDER, effectiveCcm, effectiveCsc, hashString, stableStringify } from '../core/pipeline/params';
+import { STAGE_DOMAIN, STAGE_ORDER, effectiveCcm, effectiveCscTransform, hashString, stableStringify } from '../core/pipeline/params';
 import { ccmFromTotal } from '../core/color/matrices';
 import { demosaicAHD } from '../core/demosaic/ahd';
 import { defaultLevelsForBitDepth } from '../core/raw/levels';
@@ -16,8 +16,10 @@ import {
   BILATERAL_FRAG,
   BOX_FRAG,
   COMMON_HEADER,
+  CSC_FRAG,
   DEMOSAIC_FRAG,
   DENOISE_COMBINE_FRAG,
+  DIGITAL_GAIN_FRAG,
   DISPLAY_FRAG,
   FLAT_FRAG,
   FULLSCREEN_VERT,
@@ -432,8 +434,8 @@ export class Renderer {
     const cache = preview ? this.previewCache : this.fullCache;
     const wantKey = this.stageKey(params, 'demosaic', raw.geometry.active.w, raw.geometry.active.h, preview);
     if (cache.stages.demosaic && cache.keys.demosaic === wantKey) return;
-    // Render through WB first; the cache is then populated for levels/WB.
-    const wb = this.renderChain(params, 'wb', raw, tex, preview ? this.previewFlat : this.fullFlat, preview ? this.flatPreviewTex : this.flatFullTex, cache, preview);
+    // Render through digital gain (or WB when bypassed) before the CPU demosaic.
+    const wb = this.renderChain(params, 'digitalGain', raw, tex, preview ? this.previewFlat : this.fullFlat, preview ? this.flatPreviewTex : this.flatFullTex, cache, preview);
     if (display) {
       if (preview) this.lastPreview = wb.result; else this.lastFull = wb.result;
     }
@@ -455,11 +457,12 @@ export class Renderer {
     if (stage === 'levels') return true;
     if (stage === 'flat') return !params.flat.bypass && !!this.flat;
     if (stage === 'wb') return !params.wb.bypass;
+    if (stage === 'digitalGain') return !params.digitalGain.bypass;
     if (stage === 'demosaic') return !params.demosaic.bypass;
     if (stage === 'denoise') return !params.denoise.bypass && !params.demosaic.bypass;
     if (stage === 'ccm') return !params.ccm.bypass && !params.demosaic.bypass;
-    if (stage === 'csc') return !params.csc.bypass && !params.demosaic.bypass;
     if (stage === 'gamma') return !params.gamma.bypass && !params.demosaic.bypass;
+    if (stage === 'csc') return !params.csc.bypass && !params.gamma.bypass && !params.demosaic.bypass;
     if (stage === 'sharpen') return !params.sharpen.bypass && !params.gamma.bypass && !params.demosaic.bypass;
     return false;
   }
@@ -479,6 +482,7 @@ export class Renderer {
         levels: params.levels,
         flat: params.flat,
         wb: params.wb,
+        digitalGain: params.digitalGain,
         demosaic: params.demosaic,
         denoise: params.denoise,
         ccm: params.ccm,
@@ -571,7 +575,7 @@ export class Renderer {
   ): RenderTexture {
     const gl = this.gl;
     const size = [width, height] as const;
-    const outKind = stage === 'levels' || stage === 'flat' || stage === 'wb' ? 'r16f' : 'rgba16f';
+    const outKind = stage === 'levels' || stage === 'flat' || stage === 'wb' || stage === 'digitalGain' ? 'r16f' : 'rgba16f';
     const out = this.createTexture(width, height, outKind);
     if (stage === 'levels') {
       const p = this.use('levels', LEVELS_FRAG);
@@ -627,6 +631,19 @@ export class Renderer {
       this.draw();
       return out;
     }
+    if (stage === 'digitalGain') {
+      if (params.digitalGain.bypass) {
+        this.disposeTex(out);
+        return input;
+      }
+      const p = this.use('digitalGain', DIGITAL_GAIN_FRAG);
+      this.target(out);
+      this.bindTex(p, 'uIn', input.texture, 0);
+      gl.uniform2i(this.u(p, 'uSize'), width, height);
+      gl.uniform1f(this.u(p, 'uGain'), params.digitalGain.global);
+      this.draw();
+      return out;
+    }
     if (stage === 'demosaic') {
       const p = this.use('demosaic', DEMOSAIC_FRAG);
       this.target(out);
@@ -651,11 +668,17 @@ export class Renderer {
       return out;
     }
     if (stage === 'csc') {
-      const p = this.use('matrix', MATRIX_FRAG);
+      if (params.csc.bypass) {
+        this.disposeTex(out);
+        return input;
+      }
+      const p = this.use('csc', CSC_FRAG);
+      const transform = effectiveCscTransform(params);
       this.target(out);
       this.bindTex(p, 'uIn', input.texture, 0);
       gl.uniform2i(this.u(p, 'uSize'), width, height);
-      gl.uniformMatrix3fv(this.u(p, 'uMatrix'), true, effectiveCsc(params));
+      gl.uniformMatrix3fv(this.u(p, 'uMatrix'), true, transform.matrix);
+      gl.uniform3fv(this.u(p, 'uOffset'), transform.offset);
       this.draw();
       return out;
     }

@@ -1,16 +1,10 @@
 import React from 'react';
 import { useStore } from '../state/store';
 import { comparePaneIds, getSession, renderCompare } from '../services/editor';
-import { paramsHash } from '../core/pipeline/params';
+import { paramsHash, STAGE_ORDER, STAGE_SHORT_LABELS } from '../core/pipeline/params';
 import { Button } from './controls';
 
-const STAGE_OPTIONS = [
-  { value: 'levels', label: 'RAW' },
-  { value: 'demosaic', label: '去马赛克' },
-  { value: 'denoise', label: '降噪后' },
-  { value: 'csc', label: '线性 sRGB' },
-  { value: 'sharpen', label: '最终' },
-] as const;
+const STAGE_OPTIONS = STAGE_ORDER.map((stage) => ({ value: stage, label: STAGE_SHORT_LABELS[stage] }));
 
 export function CompareView() {
   const activeId = useStore((s) => s.activeId);

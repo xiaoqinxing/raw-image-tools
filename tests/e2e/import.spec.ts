@@ -25,7 +25,7 @@ test('imports DNG, renders, histograms and exports 16-bit PNG', async ({ page })
   await toolbarSelect.selectOption('csc');
   await expect(page.getByText(/stage csc/).first()).toBeVisible();
   await toolbarSelect.selectOption('sharpen');
-  await expect(page.getByText(/stage gamma|stage sharpen/).first()).toBeVisible();
+  await expect(page.getByText(/stage (gamma|csc|sharpen)/).first()).toBeVisible();
 
   // Quality demosaic runs AHD on the CPU inside the render worker.
   await page.getByRole('button', { name: 'Quality · AHD' }).click();
@@ -34,7 +34,7 @@ test('imports DNG, renders, histograms and exports 16-bit PNG', async ({ page })
     return s.docs[s.activeId!].params.demosaic.algorithm;
   })).toBe('ahd');
   await page.waitForTimeout(500);
-  await expect(page.getByText(/stage gamma|stage sharpen/).first()).toBeVisible();
+  await expect(page.getByText(/stage (gamma|csc|sharpen)/).first()).toBeVisible();
 
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出', exact: true }).first().click();

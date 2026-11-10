@@ -91,6 +91,19 @@ void main() {
 }
 `;
 
+export const DIGITAL_GAIN_FRAG = `${COMMON_HEADER}
+uniform sampler2D uIn;
+uniform ivec2 uSize;
+uniform float uGain;
+out vec4 outColor;
+void main() {
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  if (p.x >= uSize.x || p.y >= uSize.y) discard;
+  float x = texelFetch(uIn, p, 0).r;
+  outColor = vec4(x * uGain, 0.0, 0.0, 1.0);
+}
+`;
+
 export const DEMOSAIC_FRAG = `${COMMON_HEADER}
 uniform sampler2D uIn;
 uniform ivec2 uSize;
@@ -301,6 +314,20 @@ void main() {
   if (p.x >= uSize.x || p.y >= uSize.y) discard;
   vec3 v = texelFetch(uIn, p, 0).rgb;
   outColor = vec4(uMatrix * v, 1.0);
+}
+`;
+
+export const CSC_FRAG = `${COMMON_HEADER}
+uniform sampler2D uIn;
+uniform ivec2 uSize;
+uniform mat3 uMatrix;
+uniform vec3 uOffset;
+out vec4 outColor;
+void main() {
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  if (p.x >= uSize.x || p.y >= uSize.y) discard;
+  vec3 v = texelFetch(uIn, p, 0).rgb;
+  outColor = vec4(uMatrix * v + uOffset, 1.0);
 }
 `;
 

@@ -35,6 +35,6 @@ test('bilateral denoise shader executes in the worker', async ({ page }) => {
     const s = window.__rawlab.useStore.getState();
     return { toast: s.toast, stage: s.docs[s.activeId!].stage };
   });
-  expect(state.stage).toBe('gamma');
+  expect(state.stage).toBe('csc');
   expect(state.toast ?? '').not.toContain('shader');
 });

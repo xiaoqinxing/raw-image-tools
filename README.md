@@ -4,7 +4,7 @@
 
 **把 ISP 实验室装进浏览器。**
 
-DNG / 裸 RAW → 黑白电平 → 平场 → 白平衡 → 去马赛克 → 降噪 → CCM → CSC → Gamma → USM → PNG  
+DNG / 裸 RAW → 黑白电平 → 平场 → 白平衡 → 数字增益 → 去马赛克 → 降噪 → CCM → Gamma → CSC → USM → PNG  
 解码、处理、分析、导出全部在本地完成，无后端、无上传、无账号。
 
 [![CI](https://github.com/xiaoqinxing/raw-image-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaoqinxing/raw-image-tools/actions/workflows/ci.yml)
@@ -55,7 +55,7 @@ RAW Lab 反过来，把 **从 CFA 到 sRGB 的整条 ISP 管线摊开给你看**
 - **CFA 伪彩预览**：默认开启，切到 RAW / 平场 / 白平衡阶段即可确认 Bayer 相位与数据排布。
 - **未执行项透明提示**：OpcodeList、LinearizationTable、BlackLevelDelta 等 DNG 标签不会静默忽略。
 
-### 固定 10 阶段 ISP 管线
+### 固定 11 阶段 ISP 管线
 
 顺序固定，保证不同图像、不同参数之间可比较、可复现。
 
@@ -64,13 +64,14 @@ RAW Lab 反过来，把 **从 CFA 到 sRGB 的整条 ISP 管线摊开给你看**
 | 1 | 黑/白电平 | raw CFA | GPU R16F |
 | 2 | 平场 / 镜头暗影 | raw CFA | GPU 逐 CFA 增益，强度 / epsilon / max gain |
 | 3 | 白平衡 | raw CFA | As Shot、手动、灰点吸管 |
-| 4 | 去马赛克 | camera RGB | Fast：GPU MHC（5×5 Malvar-He-Cutler）/ Bilinear；Quality：Worker/CPU 净室 AHD 近似 |
-| 5 | 降噪 | camera RGB | Guided（亮度/色度分离）或 Bilateral（可分离交叉双边近似），GPU 多 pass |
-| 6 | CCM | camera RGB | 手动 3×3、单位阵、ColorChecker 拟合 |
-| 7 | CSC | linear sRGB | DNG ForwardMatrix / ColorMatrix 推导，Bradford 适应，手动矩阵 |
-| 8 | Gamma | display sRGB | sRGB / Gamma 2.2 / Linear；bypass 时按线性值直接显示（工具栏标记 LINEAR） |
-| 9 | USM | display sRGB | 亮度通道高斯模糊 + 阈值 + 强度；依赖 Gamma 阶段 |
-| 10 | 输出 | — | 裁剪、8/16-bit PNG、任意阶段导出、全分辨率 |
+| 4 | 数字增益 | raw CFA | 全局增益；WB 之后、去马赛克之前，默认 BYP |
+| 5 | 去马赛克 | camera RGB | Fast：GPU MHC（5×5 Malvar-He-Cutler）/ Bilinear；Quality：Worker/CPU 净室 AHD 近似 |
+| 6 | 降噪 | camera RGB | Guided（亮度/色度分离）或 Bilateral（可分离交叉双边近似），GPU 多 pass |
+| 7 | CCM | camera RGB → linear sRGB | DNG ForwardMatrix / ColorMatrix 相机 Profile、手动 3×3、ColorChecker 拟合 |
+| 8 | Gamma | linear sRGB → display sRGB | sRGB / Gamma 2.2 / Linear；bypass 时按线性值直接显示（工具栏标记 LINEAR） |
+| 9 | CSC | display sRGB → YUV → display sRGB | BT.709 / BT.601 / BT.2020 标准矩阵 + 饱和度 / 对比度 / 色调 / 亮度（Gamma 编码域） |
+| 10 | USM | display sRGB | 亮度通道高斯模糊 + 阈值 + 强度；依赖 Gamma 阶段 |
+| 11 | 输出 | — | 裁剪、8/16-bit PNG、任意阶段导出、全分辨率 |
 
 配套能力：
 
@@ -137,7 +138,7 @@ flowchart LR
 ```
 
 - **React 18 + TypeScript + Vite**：桌面级工作台 UI，状态集中在 Zustand。
-- **WebGL2 + GLSL**：黑白电平、平场、WB、MHC 去马赛克、Guided/Bilateral 降噪、CCM、CSC、Gamma、USM 在 GPU 上执行。
+- **WebGL2 + GLSL**：黑白电平、平场、WB、数字增益、MHC 去马赛克、Guided/Bilateral 降噪、CCM、Gamma、CSC YUV 调整、USM 在 GPU 上执行。
 - **Web Worker**：DNG/裸 RAW 解码与 AHD、FFT 等 CPU 重任务离开主线程。
 - **LibRaw WASM**：在浏览器内解包 DNG，不依赖服务端。
 - **阶段缓存 + 双分辨率策略**：参数变化只重算下游；预览保持 CFA 相位，全分辨率按需渲染。

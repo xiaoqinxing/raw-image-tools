@@ -61,5 +61,5 @@ test('gamma bypass shows the linear output and gates the sharpen stage', async (
   // Sharpen depends on the gamma stage; show SKIP instead of pretending it ran.
   await gammaRow.getByRole('switch').click();
   await expect(sharpenRow).toContainText('SKIP');
-  await expect(page.getByText('上游阶段已 bypass，本阶段暂不执行。')).toBeVisible();
+  await expect(page.getByText('上游阶段已 bypass，本阶段暂不执行。').first()).toBeVisible();
 });

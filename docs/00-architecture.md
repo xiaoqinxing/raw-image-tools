@@ -19,7 +19,7 @@
 | 状态 | Zustand + 不可变参数快照；Worker 只接收序列化参数 | 阶段缓存可按参数哈希失效；A/B/快照天然支持 |
 | 预览 | 最长边 2048；拖动时 Fast proxy；1:1 时按可见 ROI 请求全分辨率 | 满足 150ms 响应，同时保留像素级检查 |
 | 全分辨率 | 24MP 整帧；>32MP 分块；100MP 只保留降采样预览 + 按需 ROI/分块导出 | 避免 100MP 单纹理爆显存 |
-| 色彩 | 线性 sRGB 内部；最终 sRGB；CCM 在相机 RGB 域，CSC 到线性 sRGB；总矩阵融合 | 与 DNG/ColorChecker 定义一致，避免重复变换 |
+| 色彩 | 线性 sRGB 内部；最终 sRGB；CCM 是相机 RGB → 线性 sRGB 的相机 Profile；CSC 在 Gamma 后做 RGB → YUV → RGB 调整 | 与 DNG/ColorChecker 定义一致；CSC 调整使用标准 YCbCr 矩阵 |
 | 工程文件 | JSON `.rawlab.json`，不嵌入 RAW，保存 SHA-256/尺寸/裸 RAW 配置 | 可审阅、可版本管理；重开时重新关联 |
 | 自动保存 | IndexedDB 保存工程 JSON + 缩略图 + 预设 | 刷新/崩溃恢复；RAW 仍需重新关联 |
 | 测试 | Vitest（算法/参考实现）+ Playwright（E2E/截图）+ 独立性能页 | 算法正确性与浏览器行为分开验证 |
@@ -33,8 +33,8 @@
 ### 1.1 首版目标
 
 - 导入 DNG 与可配置裸 RAW；裸 RAW 配置错误可定位、可自动探测建议。
-- 固定 10 级 ISP 管线，顺序不可重排；每级可 bypass、调参、查看中间输出。
-- 平场、灰点白平衡、CCM 手动/ColorChecker 拟合、Fast/Quality demosaic、降噪、USM、sRGB 输出。
+- 固定 11 级 ISP 管线，顺序不可重排；每级可 bypass、调参、查看中间输出。
+- 平场、灰点白平衡、数字增益、CCM 相机 Profile/ColorChecker 拟合、CSC YUV 调整、Fast/Quality demosaic、降噪、USM、sRGB 输出。
 - 直方图、像素探针、SNR、MTF、ΔE00/ΔC、波形、噪声频谱、差异图。
 - 2–4 图对比、同步缩放/平移、参数快照；工程文件/预设导入导出。
 - 24MP Fast 全分辨率 <1s、预览 <150ms、Quality <3s、冷启动 <10s、内存 <2GB。
@@ -411,13 +411,14 @@ interface PipelineParams {
 | 1 | levels | raw DN → raw-cfa | 是 | 0 | 黑电平扣除、白电平归一化；可 fuse 到 2/3 |
 | 2 | flat | raw-cfa → raw-cfa | 是 | 0 | 采样平场，逐像素 gain；零值保护 |
 | 3 | wb | raw-cfa → raw-cfa | 是 | 0 | 逐 CFA 乘增益，G=1 |
-| 4 | demosaic | raw-cfa → camera-rgb | Fast GPU / Quality CPU | 2–3 | Bilinear/MHC；AHD/RCD |
-| 5 | denoise | camera-rgb → camera-rgb | 是 | radius | 亮度/色度分离，guided/bilateral |
-| 6 | ccm | camera-rgb → camera-rgb | 是 | 0 | 3×3，默认单位阵 |
-| 7 | csc | camera-rgb → linear-srgb | 是 | 0 | DNG 矩阵推导；可与 6 fuse |
+| 4 | digitalGain | raw-cfa → raw-cfa | 是 | 0 | 全局增益，乘在 WB 后的 RAW CFA 上；默认 BYP |
+| 5 | demosaic | raw-cfa → camera-rgb | Fast GPU / Quality CPU | 2–3 | Bilinear/MHC；AHD/RCD |
+| 6 | denoise | camera-rgb → camera-rgb | 是 | radius | 亮度/色度分离，guided/bilateral |
+| 7 | ccm | camera-rgb → linear-srgb | 是 | 0 | 相机 Profile：DNG ForwardMatrix/ColorMatrix，默认非单位阵 |
 | 8 | gamma | linear-srgb → display-srgb | 是 | 0 | sRGB EOTF 或 gamma 2.2 |
-| 9 | sharpen | display-srgb → display-srgb | 是 | radius | USM，gamma 域，亮度通道 |
-| 10 | output | display-srgb → PNG | CPU | 0 | 裁剪、8/16-bit 量化、编码 |
+| 9 | csc | display-srgb → display-srgb | 是 | 0 | RGB→YUV→调整→RGB；标准矩阵 + 4 项调整 |
+| 10 | sharpen | display-srgb → display-srgb | 是 | radius | USM，gamma 域，亮度通道 |
+| 11 | output | display-srgb → PNG | CPU | 0 | 裁剪、8/16-bit 量化、编码 |
 
 **缓存键：**
 
@@ -637,7 +638,7 @@ interface DiffResult extends AnalysisMeta {
 - Stage 1 输出：`F16` 归一化 CFA；可选 clamp 负数。
 - Stage 2/3：CFA F16。
 - Stage 4 输出：camera RGB F16（3 通道存 RGBA16F，A 未用）。
-- Stage 6/7：camera RGB / linear sRGB F16；矩阵用 float32 常量，CPU 参考用 float64。
+- Stage 7/9：camera RGB → linear sRGB → display sRGB F16；矩阵用 float32 常量，CPU 参考用 float64。
 - Stage 8/9：display sRGB F16。
 - 量化：PNG 8-bit 用 `round(clamp(v,0,1)*255)`；16-bit 用 `round(v*65535)`。量化前不额外抖动（保持可复现），可选 dither 后续再加。
 
@@ -764,19 +765,24 @@ R/B 在 G、R 在 B 的核按论文方向旋转；实现中用 4 个方向变体
 - 强度映射：`luma/chroma 0..100` → `epsilon` 与最终 blend；`detail` 控制 epsilon 下限/边缘保护。
 - 半径 3/5 对应 box window；GPU 用 separable box passes，CPU 参考用积分图。
 - 输出 RGB F16；不做 BM3D；不对 RAW CFA 直接降噪。
-- 注意：管线顺序固定在 CCM/CSC 之前，因此在线性相机 RGB 上处理；UI 明确标注“线性域降噪”，不假装是感知域。
+- 注意：管线顺序固定在 CCM 之前，因此在线性相机 RGB 上处理；UI 明确标注“线性域降噪”，不假装是感知域。
 
-### 5.7 Stage 6/7：CCM 与 CSC
+### 5.7 Stage 7：CCM（相机 Profile）与 Stage 9：CSC（YUV 调整）
 
-- CCM：3×3，默认单位阵；手动输入或 ColorChecker 拟合。
-- CSC：优先 DNG `ForwardMatrix`，否则 `ColorMatrix` 求逆并按校准光源做 Bradford 适应；缺失时单位阵 + 警告。
-- 融合：最终 shader 使用
+- CCM：相机 RGB → 线性 sRGB 的输入 Profile。优先 DNG `ForwardMatrix`，否则 `ColorMatrix` 求逆并按校准光源做 Bradford 适应；缺失时单位阵 + 警告。可手动覆盖或由 ColorChecker 拟合。
+- CSC：在 Gamma 之后、display-sRGB 域执行 `RGB → YUV → 调整 → YUV → RGB`。标准矩阵由色域决定（BT.709 / BT.601 625-line / BT.2020），不可手改。
+- 四个调整在 YUV 域合成一个仿射变换：
   \[
-  M = M_{csc} M_{ccm}
+  Y' = c(Y-0.5)+0.5+b,\quad Cb'=s\cos\theta\,Cb-s\sin\theta\,Cr,\quad Cr'=s\sin\theta\,Cb+s\cos\theta\,Cr
   \]
-  一次矩阵乘，避免重复；查看中间输出时仍分阶段执行。
-- 矩阵约定：`out = M * in`；ColorChecker 拟合的 `M_total` 是 camera RGB → linear sRGB，`CCM = inv(CSC) * M_total`。
-- 若 CSC 不可逆（奇异/条件数过大），拒绝拟合并提示；不允许静默产生 NaN。
+  其中 `c/s` 来自对比度/饱和度百分比，`b` 来自亮度，`theta` 来自色调。
+- 合成后仍是一个 pass：
+  \[
+  M = M_{YUV\to RGB}\,A\,M_{RGB\to YUV},\quad out = M\,rgb + offset
+  \]
+- 矩阵约定：CCM 的 `out = M * in` 是 camera RGB → linear sRGB；ColorChecker 拟合的 `M_total` 直接作为 CCM，不再反解 CSC。
+- 不使用 CCM+CSC 矩阵融合（CSC 为非线性调整后的仿射矩阵）。
+- 不允许静默产生 NaN；CSC 调整参数越界时 clamp。
 
 ### 5.8 Stage 8：Gamma
 
@@ -816,7 +822,7 @@ V=\begin{cases}
 - 阈值默认 0；强度 0..200%；半径 0.5..3 px。
 - 高斯可分离，halo = ceil(3σ)。
 
-### 5.10 Stage 10：输出
+### 5.10 Stage 11：输出
 
 - 裁剪：传感器坐标 `Rect`；显示时按 orientation 旋转，导出时先裁剪再旋转（或先旋转再映射裁剪，二者需测试一致）。
 - 8-bit：`round(clamp(v,0,1)*255)`；16-bit：`round(clamp(v,0,1)*65535)`，big-endian PNG。
@@ -1029,7 +1035,7 @@ d = |a-b|\cdot g
 5. 参考：ColorChecker Classic 24，D65 参考 Lab；默认假设色卡与场景同光源，WB 用灰点/白块。
 6. 初值：3×3 线性最小二乘（第 6.1 节）。
 7. 优化：ΔE00 目标 + 正则 + 行和约束（第 6.2 节）。
-8. 计算 `CCM = inv(CSC) * M_total`；应用到管线；显示逐块 ΔE00/ΔC、mean/max、有效块数。
+8. 将拟合得到的 `M_total`（camera RGB → linear sRGB）直接作为 CCM；应用到管线；显示逐块 ΔE00/ΔC、mean/max、有效块数。
 9. 若 WB/平场/曝光改变，标记拟合“过期”，提示重新拟合；不自动改矩阵。
 
 ### 8.2 采样阶段
@@ -1090,7 +1096,7 @@ d = |a-b|\cdot g
 ### 9.6 ΔE / ΔC
 
 - 复用 ColorChecker 网格/采样；可在最终或线性 sRGB 阶段计算。
-- 若阶段是 camera RGB/RAW，先应用当前 CCM+CSC 到线性 sRGB，再转 Lab；UI 标注“色彩解释：应用 CCM+CSC”。
+- 若阶段是 camera RGB/RAW，先应用当前 CCM（相机 Profile）到线性 sRGB，再转 Lab；UI 标注“色彩解释：应用 CCM”。
 - 逐块 ΔE00、ΔC'、clip/used 标记；mean/max；参考版本可切换。
 - 结果可导出 CSV/PNG（分析图）；PDF 非目标。
 
@@ -1146,7 +1152,9 @@ d = |a-b|\cdot g
 | levels + flat + wb（fused） | 10–20ms | 1–2 次全屏 pass |
 | demosaic MHC | 60–120ms | 25 taps；纹理带宽主导 |
 | denoise guided | 60–120ms | 4–8 个 box/组合 pass |
-| CCM + CSC（fused） | 5–10ms | 1 个 3×3 pass |
+| CCM（相机 Profile） | 5–10ms | 1 个 3×3 pass |
+| CSC（YUV 调整） | 5–10ms | 1 个 3×3 + offset pass |
+| 数字增益（可选） | 2–5ms | 1 个 R16F pass，默认 BYP |
 | gamma + USM | 40–70ms | gamma + 2 次高斯 + 合成 |
 | 合成/显示 | 5–10ms | 缩放/方向 |
 | 调度/同步/开销 | 20–50ms | 纹理分配、fence |
@@ -1297,13 +1305,13 @@ d = |a-b|\cdot g
 ### 13.1 单元测试（Vitest）
 
 - 裸 RAW 解包：所有位宽/packing/端序/对齐/stride/offset/CFA，bit-exact 对拍生成器。
-- 黑/白电平、WB、CCM、CSC、gamma：CPU double 参考；GPU 小图 readback 误差 ≤1e-4 或 1 LSB。
+- 黑/白电平、WB、数字增益、CCM、CSC、gamma：CPU double 参考；GPU 小图 readback 误差 ≤1e-4 或 1 LSB。
 - MHC：CPU 参考 + 合成 Bayer PSNR ≥40dB；边界/单色/棋盘/斜边。
 - AHD：合成图 PSNR/视觉；外部 oracle 仅人工/脚本对比。
 - 平场：gain、G=1、强度、零值保护、clip。
 - Guided filter：常量图不变、边缘保持、已知方差。
 - CIEDE2000：Sharma 34 组测试向量。
-- CCM 拟合：合成已知矩阵恢复；ΔE mean/max；奇异 CSC 拒绝。
+- CCM 拟合：合成已知矩阵恢复；ΔE mean/max；CSC 标准矩阵/YUV 调整的数值性质。
 - SNR：合成噪声误差 ≤0.2dB。
 - MTF：合成高斯斜边，MTF50 误差 ≤5%。
 - FFT/噪声谱：Parseval、白噪声平坦、NumPy 参考。
@@ -1410,14 +1418,14 @@ d = |a-b|\cdot g
 ### Phase 2 — GPU 核心管线 + Fast demosaic（L）
 
 - Render Worker + OffscreenCanvas + WebGL2 渲染器；RGBA16F；纹理/缓存。
-- Stage 1–3（levels/flat/WB）+ Stage 4 Fast（Bilinear/MHC）+ Stage 6–8（CCM/CSC/gamma）+ Stage 10 基础输出。
+- Stage 1–4（levels/flat/WB/digitalGain）+ Stage 5 Fast（Bilinear/MHC）+ Stage 7–9（CCM/Gamma/CSC）+ Stage 11 基础输出。
 - 参数 schema/defaults/bypass；阶段查看；预览 2048；全分辨率 Fast；A/B（stage bypass）；8-bit PNG。
 - 参考实现对拍；MHC PSNR；预览/全分辨率计时。
 - **退出：** 固定管线前段可运行；预览 <150ms；24MP Fast 全分辨率 <1s（不含 PNG/Quality）；PSNR/误差达标。
 
 ### Phase 3 — 校正、降噪、锐化、Quality、导出（L）
 
-- 平场应用（强度/零值/gain clamp）；WB 灰点拾取；CCM 手动；CSC DNG 推导完善。
+- 平场应用（强度/零值/gain clamp）；WB 灰点拾取；数字增益；CCM 手动/DNG 推导；CSC YUV 调整。
 - Guided/bilateral 降噪；USM；裁剪/方向；16-bit PNG；当前视图/全分辨率导出。
 - Quality AHD（CPU Worker，tile/进度/取消）；Fast proxy 策略；1:1 ROI 请求。
 - Stage cache LRU；内存/显存监控；上下文丢失恢复。

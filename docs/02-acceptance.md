@@ -13,7 +13,7 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 
 | 套件 | 数量 | 结果 |
 |------|------|------|
-| Vitest 单元/数值 | 97 | 全部通过 |
+| Vitest 单元/数值 | 113 | 全部通过 |
 | Playwright E2E：DNG 导入 / 阶段 / 16-bit 导出 / 工程保存 | 1 | 通过 |
 | Playwright E2E：裸 RAW 导入 + 错误配置 | 1 | 通过 |
 | Playwright E2E：裸 RAW 黑白电平随位宽默认 | 1 | 通过 |
@@ -30,8 +30,9 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 | Playwright E2E：分析按需统计 / 单次预览 / 悬停读数 | 3 | 通过 |
 | Playwright E2E：灰点 WB 采样线性 RAW 阶段 | 1 | 通过 |
 | Playwright E2E：Gamma 线性显示与锐化 SKIP | 1 | 通过 |
+| Playwright E2E：数字增益阶段 + CSC YUV 调整/色域标准 | 2 | 通过 |
 | Playwright E2E：ROI 默认全图 + 框选限制 | 1 | 通过 |
-| **E2E 合计** | **19** | **全部通过** |
+| **E2E 合计** | **21** | **全部通过** |
 
 覆盖的数值测试：
 
@@ -103,17 +104,17 @@ AHD Quality：
 | DNG 导入 + DNG 专属标签 | 通过 | Opcode/Linearization 未执行，提示 |
 | 裸 RAW：8/10/12/14/16、packed/unpacked、LE/BE、stride/offset/active/CFA | 通过 | 单元测试覆盖；黑白电平默认随位宽 |
 | DNG 缺 BlackLevel/WhiteLevel | 通过 | 按位宽默认值填充并给出警告 |
-| 固定 10 阶段、逐阶段 bypass/调参/查看 | 通过 | 预览与全分辨率 |
+| 固定 11 阶段、逐阶段 bypass/调参/查看 | 通过 | 预览与全分辨率 |
 | 阶段 A/B / 快照 A/B / 闪烁 / 可拖分割线 | 通过 | 手动验证 + 差异 E2E |
-| 平场、灰点 WB、guided/bilateral 降噪 | 通过 | 平场兼容性检查；灰点读取线性 RAW 阶段；Bilateral E2E |
+| 平场、灰点 WB、数字增益、guided/bilateral 降噪 | 通过 | 平场兼容性检查；灰点读取线性 RAW 阶段；数字增益 E2E |
 | Fast MHC/Bilinear GPU；Quality AHD CPU | 通过 | AHD 为净室近似 |
-| CCM 手动/拟合、CSC DNG 推导、USM、裁剪、8/16-bit PNG、任意阶段导出 | 通过 | 16-bit 无 ICC；RAW 阶段灰度 |
+| CCM 相机 Profile 手动/DNG/拟合、CSC YUV 调整、USM、裁剪、8/16-bit PNG、任意阶段导出 | 通过 | 16-bit 无 ICC；RAW 阶段灰度；CSC E2E |
 | 直方图/悬停读数/SNR/MTF/波形/噪声频谱/ColorChecker/差异 | 通过 | 差异为 A vs bypass/快照；分析面板默认折叠，展开后随参数或共享 ROI 自动刷新 |
 | 直方图坐标 | 通过 | 横轴固定 0–1 亮度值，纵轴像素数量自适应；显示 ROI 内 R/G/B 均值与比例 |
 | ColorChecker 入口 | 通过 | 四角框选与拟合均在 ColorChecker 分析面板内，画布工具栏不再重复入口 |
 | 统一分析 ROI | 通过 | 直方图/波形默认全图；SNR/MTF/噪声/差异必须先框选；框选按钮可反复开关；raw-cfa 裁剪保持 Bayer 相位 |
 | CFA 伪彩默认开启 | 通过 | 仅影响 raw-cfa 阶段显示 |
-| Gamma bypass 线性显示 / 上游 bypass 的 SKIP 标记 | 通过 | 工具栏 LINEAR 标记；USM 依赖 Gamma |
+| Gamma bypass 线性显示 / 上游 bypass 的 SKIP 标记 | 通过 | 工具栏 LINEAR 标记；CSC 与 USM 依赖 Gamma |
 | 像素读数位置 | 通过 | 左侧栏底部 + 状态栏，不覆盖画布 |
 | 分析运行不阻塞画布 | 通过 | 无全屏遮罩、不重发预览、不覆盖当前显示阶段 |
 | 2–4 图对比、2H/2V/4 格、同步缩放平移、独立参数 | 通过 | E2E（3 图）验证 |

@@ -8,7 +8,7 @@
 RAW Lab 是一个纯浏览器 RAW 图像编辑与 ISP 分析工作台：
 
 - DNG / 裸 RAW 导入；
-- 固定 10 阶段 ISP 管线；
+- 固定 11 阶段 ISP 管线；
 - WebGL2 预览与导出；
 - ColorChecker、直方图、SNR、MTF、FFT、差异分析；
 - 工程 / 预设 / 快照 / 多图对比；

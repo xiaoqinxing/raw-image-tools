@@ -16,21 +16,11 @@ import {
 } from '../services/editor';
 import { applyHomography, homographyFromCorners } from '../core/colorchecker/geometry';
 import type { Point, Rect } from '../core/types';
-import { linearPreviewFor } from '../core/pipeline/params';
+import { linearPreviewFor, STAGE_ORDER, STAGE_SHORT_LABELS } from '../core/pipeline/params';
 import { Button } from './controls';
 import { setProbeSample } from './probe-store';
 
-const STAGE_OPTIONS = [
-  { value: 'levels', label: 'RAW 归一化' },
-  { value: 'flat', label: '平场后' },
-  { value: 'wb', label: '白平衡后' },
-  { value: 'demosaic', label: '去马赛克' },
-  { value: 'denoise', label: '降噪后' },
-  { value: 'ccm', label: 'CCM 后' },
-  { value: 'csc', label: '线性 sRGB' },
-  { value: 'gamma', label: 'Gamma 后' },
-  { value: 'sharpen', label: '最终' },
-] as const;
+const STAGE_OPTIONS = STAGE_ORDER.map((stage) => ({ value: stage, label: STAGE_SHORT_LABELS[stage] }));
 
 export function CanvasStage() {
   const doc = useActiveDoc();

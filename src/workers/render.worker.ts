@@ -10,7 +10,7 @@ import { computeNoiseSpectrum } from '../core/analysis/noise';
 import { computeDiff } from '../core/analysis/diff';
 import { cropForAnalysis } from '../core/analysis/crop';
 import { fitColorChecker } from '../core/colorchecker/fit';
-import { effectiveCsc, paramsHash, STAGE_DOMAIN } from '../core/pipeline/params';
+import { paramsHash, STAGE_DOMAIN } from '../core/pipeline/params';
 import { rawSampleAt } from '../core/pipeline/cpu';
 import { displayRgb, toRgb8 } from '../core/color/display';
 import type { RenderWorkerEvent, RenderWorkerRequest, ViewStateMessage } from './protocol';
@@ -318,7 +318,6 @@ self.onmessage = async (event: MessageEvent<RenderWorkerRequest>) => {
           width: pixels.width,
           height: pixels.height,
           corners,
-          csc: effectiveCsc(msg.params),
           referenceId: msg.options?.referenceId as string | undefined,
           inset: msg.options?.inset as number | undefined,
         });

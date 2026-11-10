@@ -26,12 +26,15 @@ export type StageId =
   | 'levels'
   | 'flat'
   | 'wb'
+  | 'digitalGain'
   | 'demosaic'
   | 'denoise'
   | 'ccm'
-  | 'csc'
   | 'gamma'
+  | 'csc'
   | 'sharpen';
+
+export type CscStandard = 'bt709' | 'bt601' | 'bt2020';
 
 export type Domain = 'raw-cfa' | 'camera-rgb' | 'linear-srgb' | 'display-srgb';
 
@@ -190,7 +193,7 @@ export interface FlatField {
 }
 
 export interface PipelineParams {
-  schemaVersion: 1;
+  schemaVersion: 2;
   levels: {
     bypass: boolean;
     black: Vec4;
@@ -211,6 +214,11 @@ export interface PipelineParams {
     multipliers: Vec4;
     pick: { x: number; y: number; radius: number } | null;
   };
+  digitalGain: {
+    bypass: boolean;
+    /** Global digital gain applied to every RAW CFA sample. */
+    global: number;
+  };
   demosaic: {
     bypass: boolean;
     algorithm: 'bilinear' | 'mhc' | 'ahd' | 'rcd';
@@ -225,15 +233,22 @@ export interface PipelineParams {
   };
   ccm: {
     bypass: boolean;
-    source: 'identity' | 'manual' | 'fit';
+    /** Camera profile (camera RGB -> linear sRGB) or a user/ColorChecker correction. */
+    source: 'dng' | 'identity' | 'manual' | 'fit';
     matrix: Mat3;
     fitId?: string;
   };
   csc: {
     bypass: boolean;
-    source: 'dng' | 'manual' | 'identity';
-    matrix: Mat3;
-    adaptation: 'bradford' | 'none';
+    standard: CscStandard;
+    /** 0..200 (%), 100 = unchanged. */
+    saturation: number;
+    /** 0..200 (%), 100 = unchanged; pivot at 0.5 in the gamma-encoded domain. */
+    contrast: number;
+    /** -180..180 degrees. */
+    hue: number;
+    /** -100..100, mapped to -0.5..0.5 in gamma-encoded Y. */
+    brightness: number;
   };
   gamma: {
     bypass: boolean;
@@ -327,7 +342,7 @@ export interface FlatFileRef {
 
 export interface ProjectFile {
   schema: 'rawlab.project';
-  version: 1;
+  version: 2;
   appVersion: string;
   createdAt: string;
   modifiedAt: string;
@@ -362,7 +377,7 @@ export interface ProjectFile {
 
 export interface Preset {
   schema: 'rawlab.preset';
-  version: 1;
+  version: 2;
   id: string;
   name: string;
   createdAt: string;
