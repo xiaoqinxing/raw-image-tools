@@ -13,7 +13,7 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 
 | 套件 | 数量 | 结果 |
 |------|------|------|
-| Vitest 单元/数值 | 130 | 全部通过 |
+| Vitest 单元/数值 | 133 | 全部通过 |
 | Playwright E2E：DNG 导入 / 阶段 / 16-bit 导出 / 工程保存 | 1 | 通过 |
 | Playwright E2E：裸 RAW 导入 + 错误配置 | 1 | 通过 |
 | Playwright E2E：裸 RAW 黑白电平随位宽默认 | 1 | 通过 |
@@ -29,11 +29,12 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 | Playwright E2E：桌面 / 平板 / 手机 / 横屏响应式布局与抽屉 | 1 | 通过 |
 | Playwright E2E：状态栏版本号 + 自动更新日志弹窗 | 1 | 通过 |
 | Playwright E2E：分析按需统计 / 单次预览 / 悬停读数 | 3 | 通过 |
+| Playwright E2E：分析面板高度拖拽 / 键盘调整 / 复位 | 1 | 通过 |
 | Playwright E2E：灰点 WB 采样线性 RAW 阶段 | 1 | 通过 |
 | Playwright E2E：Gamma 线性显示与锐化 SKIP | 1 | 通过 |
 | Playwright E2E：数字增益阶段 + CSC YUV 调整/色域标准 | 2 | 通过 |
 | Playwright E2E：ROI 默认全图 + 框选限制 | 1 | 通过 |
-| **E2E 合计** | **22** | **全部通过** |
+| **E2E 合计** | **23** | **全部通过** |
 
 覆盖的数值测试：
 
@@ -111,6 +112,7 @@ AHD Quality：
 | Fast MHC/Bilinear GPU；Quality AHD CPU | 通过 | AHD 为净室近似 |
 | CCM 相机 Profile 手动/DNG/拟合、CSC YUV 调整、USM、裁剪、8/16-bit PNG、任意阶段导出 | 通过 | 16-bit 无 ICC；RAW 阶段灰度；CSC E2E |
 | 直方图/悬停读数/SNR/MTF/波形/噪声频谱/ColorChecker/差异 | 通过 | 差异为 A vs bypass/快照；分析面板默认折叠，展开后随参数或共享 ROI 自动刷新 |
+| 分析面板高度 | 通过 | 展开后拖动上边缘调整；↑/↓、Home/End、双击或 Enter 复位；最小 160px，并为画布保留空间 |
 | 直方图坐标 | 通过 | 横轴固定 0–1 亮度值，纵轴像素数量自适应；显示 ROI 内 R/G/B 均值与比例 |
 | ColorChecker 入口 | 通过 | 四角框选与拟合均在 ColorChecker 分析面板内，画布工具栏不再重复入口 |
 | 统一分析 ROI | 通过 | 直方图/波形默认全图；SNR/MTF/噪声/差异必须先框选；框选按钮可反复开关；raw-cfa 裁剪保持 Bayer 相位 |

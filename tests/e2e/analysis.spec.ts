@@ -102,6 +102,61 @@ test.describe('analysis scheduling and hover readout', () => {
     expect(await countMessages('renderPreview')).toBe(1);
   });
 
+  test('resizes the analysis dock from its top edge', async ({ page }) => {
+    const dock = page.locator('.analysis-dock');
+    const handle = page.getByTestId('analysis-resize-handle');
+    const viewportHeight = () => page.evaluate(() => {
+      const w = window as unknown as { __rawlab: { useStore: { getState: () => { viewport: { height: number } } } } };
+      return w.__rawlab.useStore.getState().viewport.height;
+    });
+
+    await expect(dock).toHaveClass(/is-collapsed/);
+    await page.getByTestId('analysis-tab-histogram').click();
+    await expect(dock).not.toHaveClass(/is-collapsed/);
+    await expect(page.getByRole('separator', { name: '调整分析面板高度' })).toBeVisible();
+
+    const defaultBox = await dock.boundingBox();
+    const handleBox = await handle.boundingBox();
+    expect(defaultBox).not.toBeNull();
+    expect(handleBox).not.toBeNull();
+    const canvasHeight = await viewportHeight();
+    const x = handleBox!.x + handleBox!.width / 2;
+    const y = handleBox!.y + handleBox!.height / 2;
+
+    // Drag upward: the dock grows and the canvas viewport shrinks.
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x, y - 100, { steps: 10 });
+    await page.mouse.up();
+    const enlarged = await dock.boundingBox();
+    expect(enlarged!.height).toBeGreaterThan(defaultBox!.height + 60);
+    await expect.poll(viewportHeight, { timeout: 5_000 }).toBeLessThan(canvasHeight);
+
+    // Keyboard resize and Enter reset.
+    await handle.focus();
+    await page.keyboard.press('ArrowDown');
+    await expect.poll(async () => (await dock.boundingBox())!.height, { timeout: 5_000 }).toBeLessThan(enlarged!.height);
+    await page.keyboard.press('Enter');
+    await expect.poll(async () => Math.round((await dock.boundingBox())!.height), { timeout: 5_000 }).toBe(Math.round(defaultBox!.height));
+
+    // Dragging downward is bounded by the minimum height; double-click restores the default.
+    const resetBox = await handle.boundingBox();
+    await page.mouse.move(resetBox!.x + resetBox!.width / 2, resetBox!.y + resetBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(resetBox!.x + resetBox!.width / 2, resetBox!.y + 150, { steps: 10 });
+    await page.mouse.up();
+    const shrunk = await dock.boundingBox();
+    expect(shrunk!.height).toBeGreaterThanOrEqual(160);
+    expect(shrunk!.height).toBeLessThan(defaultBox!.height);
+    await handle.dblclick();
+    await expect.poll(async () => Math.round((await dock.boundingBox())!.height), { timeout: 5_000 }).toBe(Math.round(defaultBox!.height));
+
+    // Collapsing hides the handle; the dock returns to its 32px toolbar height.
+    await page.locator('.analysis-collapse').click();
+    await expect(dock).toHaveClass(/is-collapsed/);
+    await expect(handle).toHaveCount(0);
+  });
+
   test('hover readout appears in the left rail and status bar', async ({ page }) => {
     const host = page.locator('.canvas-host').first();
     const box = await host.boundingBox();

@@ -7,6 +7,7 @@ import { paramsHash } from '../core/pipeline/params';
 import { ColorCheckerABPlot } from './ColorCheckerABPlot';
 import { normalizeColorCheckerSettings } from '../core/colorchecker/settings';
 import { getReference, type ColorCheckerPatch } from '../core/color/colorchecker-data';
+import { useAnalysisDockResize } from './analysis-dock-resize';
 
 const TABS: Array<{ id: AnalysisTab; label: string }> = [
   { id: 'histogram', label: '直方图' },
@@ -587,6 +588,8 @@ export function AnalysisDock() {
   const requiresRoi = tab === 'snr' || tab === 'mtf' || tab === 'noise' || tab === 'diff';
   const roiKey = doc?.roi ? `${doc.roi.x},${doc.roi.y},${doc.roi.w},${doc.roi.h}` : 'full';
   const lastRunKey = React.useRef<{ roiKey: string; tab: AnalysisTab } | null>(null);
+  const [dockNode, setDockNode] = React.useState<HTMLDivElement | null>(null);
+  const dockResize = useAnalysisDockResize(dockNode, !collapsed);
 
   React.useEffect(() => {
     const mq = window.matchMedia('(max-height: 520px) and (max-width: 1199px)');
@@ -636,7 +639,13 @@ export function AnalysisDock() {
   const result = tab === 'diff' ? doc.analysis.diff : doc.analysis[tab];
   const roi = doc.roi;
   return (
-    <div className={`analysis-dock flex flex-col border-t border-ink-700 bg-ink-900 ${collapsed ? 'is-collapsed' : ''} ${!collapsed && tab === 'colorchecker' ? 'is-colorchecker' : ''}`}>
+    <div ref={setDockNode} style={dockResize.style} className={`analysis-dock flex flex-col border-t border-ink-700 bg-ink-900 ${collapsed ? 'is-collapsed' : ''} ${!collapsed && tab === 'colorchecker' ? 'is-colorchecker' : ''}`}>
+      {!collapsed ? (
+        <div
+          className={`analysis-resize-handle ${dockResize.resizing ? 'is-resizing' : ''}`}
+          {...dockResize.handleProps}
+        />
+      ) : null}
       <div className="analysis-toolbar flex items-center border-b border-ink-700/70">
         <div className="analysis-tabs flex min-w-0 flex-1 items-center overflow-x-auto px-2 scroll-thin">
           {TABS.map((t) => (

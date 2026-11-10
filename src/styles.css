@@ -67,10 +67,52 @@ html, body, #root {
   height: 230px;
   min-height: 170px;
   flex: 0 0 auto;
+  position: relative;
 }
 .analysis-dock.is-colorchecker {
   height: clamp(300px, 38vh, 380px);
   min-height: 260px;
+}
+.analysis-resize-handle {
+  display: grid;
+  flex: 0 0 8px;
+  place-items: center;
+  height: 8px;
+  min-height: 8px;
+  background: var(--panel);
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+}
+.analysis-resize-handle::before {
+  content: '';
+  width: 40px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--muted);
+  opacity: 0.55;
+}
+.analysis-resize-handle:hover::before,
+.analysis-resize-handle:focus-visible::before,
+.analysis-resize-handle.is-resizing::before {
+  background: var(--accent);
+  opacity: 1;
+}
+.analysis-resize-handle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+body.analysis-resizing,
+body.analysis-resizing * {
+  cursor: ns-resize !important;
+  user-select: none !important;
+}
+@media (pointer: coarse) {
+  .analysis-resize-handle {
+    flex-basis: 14px;
+    height: 14px;
+    min-height: 14px;
+  }
 }
 .analysis-toolbar {
   height: 32px;

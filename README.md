@@ -93,7 +93,7 @@ RAW Lab 反过来，把 **从 CFA 到 sRGB 的整条 ISP 管线摊开给你看**
 - **波形**：luma / RGB parade。
 - **噪声频谱**：2D FFT、log power、径向平均、H/V 1D PSD、去趋势、Hann。
 - **差异指标**：MAE / PSNR / max diff，对比当前管线与阶段 bypass 或快照。
-- **按需统计**：分析面板默认折叠，折叠时不占用 Worker；展开后所有分析随参数或 ROI 变化自动重算，也可随时手动“重算”；运行分析不会改变画布显示或触发全屏遮罩。
+- **按需统计**：分析面板默认折叠，折叠时不占用 Worker；展开后所有分析随参数或 ROI 变化自动重算，也可随时手动“重算”；运行分析不会改变画布显示或触发全屏遮罩。展开后可拖动面板上边缘调整高度，双击或按 Enter 恢复默认。
 
 ### 工程、预设与多图对比
 
@@ -114,7 +114,7 @@ RAW Lab 反过来，把 **从 CFA 到 sRGB 的整条 ISP 管线摊开给你看**
 
 - ≥1200px：左图像栏、中央画布/分析、右 ISP 管线三栏布局。
 - <1200px：两侧栏变成抽屉，画布占满宽度；顶栏「图像 / 管线」随取随用。
-- 手机端：分析面板可折叠，短屏横屏自动收起；工具栏可横向滑动。
+- 手机端：分析面板可折叠、可拖动上边缘调整高度，短屏横屏自动收起；工具栏可横向滑动。
 - 分析视图与对话框窄屏自动改为纵向布局，无横向溢出。
 
 <p align="center">
@@ -179,9 +179,9 @@ npm run dev          # http://127.0.0.1:5173
 
 ```bash
 npm run typecheck
-npm test             # Vitest：75 个单元/数值测试
+npm test             # Vitest：133 个单元/数值测试
 npx playwright install chromium
-npm run test:e2e     # Playwright：12 个 E2E
+npm run test:e2e     # Playwright：23 个 E2E
 npm run build
 ```
 
