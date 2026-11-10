@@ -432,7 +432,7 @@ function ColorCheckerView({ result }: { result: ColorCheckerResult | null }) {
 
         {!fit ? (
           <div className="rounded border border-ink-700 p-2 text-[11px] leading-4 text-ink-500">
-            点击“四角框选”后，在画布上依次点选 24 色块区域的四角（不是卡片外框），再点“拟合 CCM”。取样框只在 ColorChecker 面板展开时显示。
+            点击“四角框选”后，在画布上依次点选 24 色块区域的四角（不是卡片外框）。已选角点会在画布上用序号标出；选满 4 点后点“拟合 CCM”。取样框只在 ColorChecker 面板展开时显示。
           </div>
         ) : null}
       </div>

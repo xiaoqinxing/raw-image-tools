@@ -32,7 +32,14 @@ test('colorchecker manual corners and CCM fit', async ({ page }) => {
     });
     return [map(50, 30), map(550, 30), map(550, 370), map(50, 370)];
   });
-  for (const p of pts) await page.mouse.click(p.x, p.y);
+  for (let i = 0; i < pts.length; i++) {
+    await page.mouse.click(pts[i].x, pts[i].y);
+    if (i < 3) {
+      await expect(page.getByTestId(`cc-corner-${i + 1}`)).toBeVisible();
+      await expect(page.locator('.canvas-hint span').first()).toContainText(`已选 ${i + 1}/4`);
+    }
+  }
+  await expect(page.getByTestId('cc-corner-picking')).toHaveCount(0);
   await expect(page.getByText('四角已选，点击下方“拟合 CCM”').first()).toBeVisible({ timeout: 10_000 });
   await page.getByRole('button', { name: '拟合 CCM', exact: true }).click();
   const toast = page.locator('.toast');

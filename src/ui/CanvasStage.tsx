@@ -21,6 +21,8 @@ import { Button } from './controls';
 import { setProbeSample } from './probe-store';
 
 const STAGE_OPTIONS = STAGE_ORDER.map((stage) => ({ value: stage, label: STAGE_SHORT_LABELS[stage] }));
+const CC_CORNER_LABELS = ['左上 TL', '右上 TR', '右下 BR', '左下 BL'] as const;
+const CC_CORNER_LABELS_SHORT = ['左上', '右上', '右下', '左下'] as const;
 
 export function CanvasStage() {
   const doc = useActiveDoc();
@@ -133,8 +135,19 @@ export function CanvasStage() {
   };
   const roi = doc.roi;
   const roiCss = roi ? rectToCss(roi) : null;
+  const ccPicking = tool === 'colorchecker';
   const ccCorners = ccDraft.length ? ccDraft : doc.colorChecker.corners;
   const ccCss = ccCorners?.map((p) => imageToCss(doc, viewport, p.x, p.y)) ?? null;
+  const ccPickPoints = ccPicking
+    ? (ccDraft.length ? ccDraft : doc.colorChecker.corners?.length === 4 ? doc.colorChecker.corners : [])
+    : [];
+  const ccPickCss = ccPickPoints.map((p) => imageToCss(doc, viewport, p.x, p.y));
+  const ccHint = ccDraft.length
+    ? `已选 ${ccDraft.length}/4 · 下一角：${CC_CORNER_LABELS[ccDraft.length] ?? ''}`
+    : '点选 24 色块区域四角（TL/TR/BR/BL，不是卡片外框）';
+  const ccHintMobile = ccDraft.length
+    ? `已选 ${ccDraft.length}/4 · 下一角 ${CC_CORNER_LABELS_SHORT[ccDraft.length] ?? ''}`
+    : '点 24 色块区域四角';
   let ccGrid: Array<[Point, Point]> = [];
   if (ccCorners && ccCorners.length === 4 && ccCss) {
     const h = homographyFromCorners(ccCorners as [Point, Point, Point, Point]);
@@ -387,7 +400,7 @@ export function CanvasStage() {
       </div>
 
       <div
-        className="canvas-host checker relative min-h-0 flex-1 overflow-hidden"
+        className={`canvas-host checker relative min-h-0 flex-1 overflow-hidden${ccPicking ? ' is-cc-picking' : ''}`}
         onWheel={(e) => {
           e.preventDefault();
           const r = e.currentTarget.getBoundingClientRect();
@@ -411,7 +424,7 @@ export function CanvasStage() {
             <g>
               <polygon points={ccCss.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#ffb85c" strokeWidth={1.5} />
               {ccGrid.map(([a, b], i) => <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#ffb85c" strokeOpacity={0.45} strokeWidth={0.7} />)}
-              {ccCss.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={3} fill="#ffb85c" />)}
+              {!ccPicking ? ccCss.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={4} fill="#ffb85c" stroke="#101418" strokeWidth={1.5} />) : null}
               {ccCells?.map((cell) => {
                 const sample = fitSamples?.[cell.index];
                 const weight = sample?.weight ?? doc.colorCheckerSettings?.weights?.[cell.index] ?? 1;
@@ -467,6 +480,51 @@ export function CanvasStage() {
           {cropCss ? (
             <rect x={cropCss.x} y={cropCss.y} width={cropCss.w} height={cropCss.h} fill="none" stroke="#5fd99a" strokeWidth={1.2} />
           ) : null}
+          {ccPickCss.length ? (
+            <g data-testid="cc-corner-picking">
+              {ccPickCss.length > 1 ? (
+                <polyline
+                  points={ccPickCss.map((p) => `${p.x},${p.y}`).join(' ')}
+                  fill="none"
+                  stroke="#ffb85c"
+                  strokeWidth={1.5}
+                  strokeDasharray="5 4"
+                  strokeOpacity={0.85}
+                />
+              ) : null}
+              {ccPickCss.map((p, i) => {
+                const latest = i === ccPickCss.length - 1;
+                const labelX = Math.min(p.x + 17, viewport.width - 72);
+                return (
+                  <g key={i} data-testid={`cc-corner-${i + 1}`}>
+                    {latest ? (
+                      <circle className="cc-corner-pulse" cx={p.x} cy={p.y} r={13} fill="none" stroke="#ffb85c" strokeWidth={1.5} />
+                    ) : null}
+                    <g stroke="#ffb85c" strokeWidth={2} strokeLinecap="round">
+                      <line x1={p.x - 17} y1={p.y} x2={p.x - 9} y2={p.y} />
+                      <line x1={p.x + 9} y1={p.y} x2={p.x + 17} y2={p.y} />
+                      <line x1={p.x} y1={p.y - 17} x2={p.x} y2={p.y - 9} />
+                      <line x1={p.x} y1={p.y + 9} x2={p.x} y2={p.y + 17} />
+                    </g>
+                    <circle cx={p.x} cy={p.y} r={8.5} fill="rgba(16,20,24,0.82)" stroke="#ffb85c" strokeWidth={2} />
+                    <text x={p.x} y={p.y + 3.5} textAnchor="middle" fill="#ffe1b8" fontSize={11} fontWeight={700} fontFamily="monospace">{i + 1}</text>
+                    <text
+                      x={labelX}
+                      y={p.y + 4}
+                      fill="#ffe1b8"
+                      fontSize={10}
+                      fontFamily="monospace"
+                      stroke="#101418"
+                      strokeWidth={3}
+                      paintOrder="stroke"
+                    >
+                      {CC_CORNER_LABELS[i] ?? ''}
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
+          ) : null}
           {abMode !== 'off' || diffMode ? (
             <g>
               <line x1={split * viewport.width} y1={0} x2={split * viewport.width} y2={viewport.height} stroke="#ffffff" strokeOpacity={0.5} strokeWidth={1} />
@@ -476,8 +534,8 @@ export function CanvasStage() {
           ) : null}
         </svg>
         <div className="canvas-hint pointer-events-none absolute bottom-2 left-2 rounded bg-black/45 px-2 py-1 text-[11px] text-ink-300">
-          <span className="hidden sm:inline">{tool === 'pan' ? '拖拽平移 · 滚轮缩放 · 双击适配' : tool === 'roi' ? '拖拽框选分析 ROI · Esc 结束 · Alt+拖拽平移' : tool === 'gray' ? '点击灰点（平场校正后 RAW）' : tool === 'colorchecker' ? '点选 24 色块区域四角（TL/TR/BR/BL，不是卡片外框）' : '拖拽设置输出裁剪'}</span>
-          <span className="sm:hidden">{tool === 'pan' ? '拖拽平移 · 双击适配' : tool === 'roi' ? '拖拽框选 ROI · 可连续调整' : tool === 'gray' ? '点击灰点' : tool === 'colorchecker' ? '点 24 色块区域四角' : '拖拽裁剪'}</span>
+          <span className="hidden sm:inline">{tool === 'pan' ? '拖拽平移 · 滚轮缩放 · 双击适配' : tool === 'roi' ? '拖拽框选分析 ROI · Esc 结束 · Alt+拖拽平移' : tool === 'gray' ? '点击灰点（平场校正后 RAW）' : tool === 'colorchecker' ? ccHint : '拖拽设置输出裁剪'}</span>
+          <span className="sm:hidden">{tool === 'pan' ? '拖拽平移 · 双击适配' : tool === 'roi' ? '拖拽框选 ROI · 可连续调整' : tool === 'gray' ? '点击灰点' : tool === 'colorchecker' ? ccHintMobile : '拖拽裁剪'}</span>
         </div>
         <div className="pointer-events-none absolute left-2 top-2 max-w-[70%] truncate rounded bg-black/50 px-2 py-1 text-[11px] text-ink-300 sm:hidden">
           {doc.fileName} · {doc.meta.geometry.active.w}×{doc.meta.geometry.active.h}

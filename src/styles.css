@@ -524,6 +524,23 @@ button, input, select {
   touch-action: none;
 }
 
+.canvas-host.is-cc-picking { cursor: crosshair; }
+
+.cc-corner-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cc-corner-pulse 1.4s ease-out infinite;
+}
+
+@keyframes cc-corner-pulse {
+  0% { transform: scale(0.85); opacity: 0.9; }
+  75%, 100% { transform: scale(1.55); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cc-corner-pulse { animation: none; opacity: 0.55; }
+}
+
 .field-label { color: var(--muted); font-size: 11px; }
 .field-row { display: flex; align-items: center; gap: 8px; }
 .num { font-family: "JetBrains Mono", monospace; font-variant-numeric: tabular-nums; }
