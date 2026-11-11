@@ -10,6 +10,7 @@ export function Button({
   title,
   className = '',
   testId,
+  ariaPressed,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
@@ -18,11 +19,13 @@ export function Button({
   title?: string;
   className?: string;
   testId?: string;
+  ariaPressed?: boolean;
 }) {
   return (
     <button
       type="button"
       data-testid={testId}
+      aria-pressed={ariaPressed}
       className={`btn ${variant === 'primary' ? 'btn-primary' : variant === 'ghost' ? 'btn-ghost' : ''} ${className}`}
       onClick={onClick}
       disabled={disabled}

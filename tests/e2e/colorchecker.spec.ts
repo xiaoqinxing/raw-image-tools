@@ -90,9 +90,16 @@ test('colorchecker shows sample boxes, weights and a*b* plot', async ({ page }) 
   await page.getByRole('button', { name: '拟合 CCM', exact: true }).click();
   await expect(page.locator('.toast')).toContainText('CCM 拟合完成', { timeout: 30_000 });
   await expect(page.getByTestId('cc-fit-summary')).toContainText('参与 23');
+  await expect(page.getByTestId('cc-saturation')).toContainText(/饱和度\s*\d+\.\d+%/);
   await expect(page.getByRole('button', { name: 'a*b* 图' })).toBeEnabled();
   await page.getByRole('button', { name: 'a*b* 图' }).click();
   await expect(page.getByLabel('ColorChecker a*b* 偏差图')).toBeVisible();
+  const chromaToggle = page.getByRole('button', { name: '色度背景' });
+  await expect(chromaToggle).toHaveAttribute('aria-pressed', 'true');
+  await chromaToggle.click();
+  await expect(chromaToggle).toHaveAttribute('aria-pressed', 'false');
+  await chromaToggle.click();
+  await expect(chromaToggle).toHaveAttribute('aria-pressed', 'true');
   const desktopBox = await page.getByLabel('ColorChecker a*b* 偏差图').boundingBox();
   expect(desktopBox?.height ?? 0).toBeGreaterThan(120);
   await page.setViewportSize({ width: 390, height: 844 });

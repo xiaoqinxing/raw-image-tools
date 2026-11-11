@@ -520,6 +520,11 @@ export interface ColorCheckerResult extends AnalysisMeta {
   meanDE00Standard?: number;
   maxDE00Standard?: number;
   meanChromaError?: number;
+  /** Imatest Chroma(%): weighted mean C* of the measured patches vs the D65 reference. */
+  saturationGain?: number;
+  /** Same figure relative to the adjusted fit target (target saturation/hue applied). */
+  saturationGainTarget?: number;
+  saturationCount?: number;
   matrixTotal: Mat3;
   matrixCcm: Mat3;
   validCount: number;

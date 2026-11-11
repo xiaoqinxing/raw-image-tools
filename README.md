@@ -89,7 +89,7 @@ RAW Lab 反过来，把 **从 CFA 到 sRGB 的整条 ISP 管线摊开给你看**
 - **统一分析 ROI**：直方图与波形默认全图，可框选限制；SNR、MTF、噪声频谱、差异必须先点击“框选”并拖拽。框选按钮可反复开关，开启时持续生效。
 - **SNR**：在所选 ROI 内逐通道 mean/std/dB，display 域自动逆 gamma。
 - **MTF**：斜边检测、4× oversampling、Hann、FFT、MTF50/MTF10。
-- **ColorChecker Classic 24**（pre-2014 D65）：四角框选、透视网格、显式取样框、24 块逐块权重、加权最小二乘 + ΔE00/色度优先优化、全局目标饱和度/色调、底部四中性块 WB、逐块目标/标准 ΔE00/ΔC'/ΔH'、a*b* 偏差图、一键应用 CCM；操作入口在 ColorChecker 分析面板内。
+- **ColorChecker Classic 24**（pre-2014 D65）：四角框选、透视网格、显式取样框、24 块逐块权重、加权最小二乘 + ΔE00/色度优先优化、全局目标饱和度/色调、底部四中性块 WB、逐块目标/标准 ΔE00/ΔC'/ΔH'、拟合后饱和度（Imatest Chroma% 口径，目标 100%）、a*b* 偏差图（固定 L*=50 彩色背景，可切换）、一键应用 CCM；操作入口在 ColorChecker 分析面板内。
 - **波形**：luma / RGB parade。
 - **噪声频谱**：2D FFT、log power、径向平均、H/V 1D PSD、去趋势、Hann。
 - **差异指标**：MAE / PSNR / max diff，对比当前管线与阶段 bypass 或快照。

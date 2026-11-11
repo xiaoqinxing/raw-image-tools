@@ -37,12 +37,71 @@ export interface CcmFitResult {
   meanDE00Standard: number;
   maxDE00Standard: number;
   meanChromaError: number;
+  /** Weighted chroma percentage vs the original D65 reference (Imatest Chroma%). */
+  saturationGain: number;
+  /** Weighted chroma percentage vs the adjusted (user-target) reference. */
+  saturationGainTarget: number;
+  /** Number of chromatic patches that contributed to the saturation figures. */
+  saturationCount: number;
   validCount: number;
   usedCount: number;
   method: 'ls' | 'de00-optimized' | 'chroma-optimized';
   objective: ColorCheckerObjective;
   iterations: number;
   warnings: string[];
+}
+
+export interface ChromaGainInput {
+  measuredLab: Lab;
+  refLab: Lab;
+  standardRefLab?: Lab;
+  weight: number;
+}
+
+export interface ChromaGainStats {
+  /** 100 × weighted mean C* of the measured patches / that of the standard reference. */
+  gain: number;
+  /** 100 × weighted mean C* of the measured patches / that of the adjusted fit target. */
+  gainTarget: number;
+  count: number;
+}
+
+/**
+ * Imatest-style chroma percentage for a chart fit.
+ *
+ * Imatest reports Chroma(%) = 100 × mean|C*measured| / mean|C*ideal| over the
+ * eighteen chromatic patches. Applying the per-patch fit weights turns the
+ * ratio of weighted means into a ratio of weighted sums, which reduces to the
+ * Imatest definition when every weight is 1. Only chromatic patches (index
+ * 0..17) that actually took part in the fit should be passed in.
+ */
+export function chromaGainStats(entries: ChromaGainInput[]): ChromaGainStats {
+  let sumMeasured = 0;
+  let sumRef = 0;
+  let sumStandard = 0;
+  let count = 0;
+  for (const entry of entries) {
+    const w = Number.isFinite(entry.weight) && entry.weight > 0 ? entry.weight : 0;
+    if (!(w > 0)) continue;
+    const measured = Math.hypot(entry.measuredLab[1], entry.measuredLab[2]);
+    const ref = Math.hypot(entry.refLab[1], entry.refLab[2]);
+    const standardRef = entry.standardRefLab
+      ? Math.hypot(entry.standardRefLab[1], entry.standardRefLab[2])
+      : ref;
+    if (!Number.isFinite(measured) || !Number.isFinite(ref) || !(ref > 0)) continue;
+    sumMeasured += w * measured;
+    sumRef += w * ref;
+    sumStandard += w * (standardRef > 0 ? standardRef : ref);
+    count++;
+  }
+  if (!count || !(sumRef > 0) || !(sumStandard > 0)) {
+    return { gain: Number.NaN, gainTarget: Number.NaN, count: 0 };
+  }
+  return {
+    gain: (100 * sumMeasured) / sumStandard,
+    gainTarget: (100 * sumMeasured) / sumRef,
+    count,
+  };
 }
 
 function normalizeWeights(weights: number[] | undefined, length: number): number[] {
@@ -255,6 +314,7 @@ export function fitCcm(input: CcmFitInput): CcmFitResult {
   let maxStandard = 0;
   let standardCount = 0;
   let usedCount = 0;
+  const chromaEntries: ChromaGainInput[] = [];
   const stdLabs = input.standardReferenceLab;
 
   for (let i = 0; i < input.camera.length; i++) {
@@ -284,6 +344,15 @@ export function fitCcm(input: CcmFitInput): CcmFitResult {
       weightedSum += weights[i] * parts.dE00;
       weightSum += weights[i];
       usedCount++;
+      // Imatest Chroma(%) uses the first three rows (index 0..17) only.
+      if (i < 18) {
+        chromaEntries.push({
+          measuredLab,
+          refLab: ref,
+          standardRefLab: stdLabs?.[i],
+          weight: weights[i],
+        });
+      }
     }
     patches.push({
       index: i,
@@ -303,6 +372,7 @@ export function fitCcm(input: CcmFitInput): CcmFitResult {
     });
   }
 
+  const chromaStats = chromaGainStats(chromaEntries);
   return {
     matrixTotal: chosen,
     matrixCcm: chosen,
@@ -315,6 +385,9 @@ export function fitCcm(input: CcmFitInput): CcmFitResult {
     meanDE00Standard: standardCount ? sumStandard / standardCount : 0,
     maxDE00Standard: maxStandard,
     meanChromaError: count ? sumChroma / count : 0,
+    saturationGain: chromaStats.gain,
+    saturationGainTarget: chromaStats.gainTarget,
+    saturationCount: chromaStats.count,
     validCount: count,
     usedCount,
     method,

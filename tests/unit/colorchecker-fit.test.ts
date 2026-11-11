@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fitColorChecker } from '../../src/core/colorchecker/fit';
+import { chromaGainStats } from '../../src/core/color/ccm';
 import { applyHomography, homographyFromCorners } from '../../src/core/colorchecker/geometry';
 import { COLOR_CHECKER_CLASSIC_24 } from '../../src/core/color/colorchecker-data';
 import { inverse3, mul3Vec } from '../../src/core/color/matrices';
@@ -82,6 +83,9 @@ describe('ColorChecker fit path', () => {
     expect(result.matrixCcm[0]).toBeCloseTo(cameraToSrgb[0], 2);
     expect(result.matrixCcm[4]).toBeCloseTo(cameraToSrgb[4], 2);
     expect(result.matrixCcm[8]).toBeCloseTo(cameraToSrgb[8], 2);
+    // A recovered camera matrix must not invent a chroma boost.
+    expect(result.saturationGain).toBeCloseTo(100, 0);
+    expect(result.saturationCount).toBe(18);
   });
 
   it('is independent of chart exposure and residual WB gain', () => {
@@ -137,6 +141,11 @@ describe('ColorChecker fit path', () => {
     expect(result.warnings.join(' ')).toContain('目标已调整');
     expect(result.samples?.length).toBe(24);
     expect(result.samples?.[0].quad.length).toBe(4);
+    // Raising the target saturation must raise the achieved chroma above the
+    // standard reference, and the relative-to-target figure stays meaningful.
+    expect(result.saturationGain).toBeGreaterThan(105);
+    expect(result.saturationGainTarget).toBeTypeOf('number');
+    expect(result.saturationCount).toBe(18);
   });
 
   it('reports the chroma-priority objective and components', () => {
@@ -152,5 +161,53 @@ describe('ColorChecker fit path', () => {
     expect(result.objective).toBe('chroma');
     expect(result.meanChromaError).toBeTypeOf('number');
     expect(result.patches[0].dEChroma).toBeTypeOf('number');
+  });
+});
+
+const lab = (L: number, a: number, b: number): [number, number, number] => [L, a, b];
+
+describe('chroma gain statistics', () => {
+  it('reports 100% when the measured chroma matches the reference', () => {
+    const stats = chromaGainStats([
+      { measuredLab: lab(50, 40, 0), refLab: lab(50, 40, 0), weight: 1 },
+      { measuredLab: lab(60, 0, 30), refLab: lab(60, 0, 30), weight: 2 },
+    ]);
+    expect(stats.gain).toBeCloseTo(100, 9);
+    expect(stats.gainTarget).toBeCloseTo(100, 9);
+    expect(stats.count).toBe(2);
+  });
+
+  it('reports 120% when every chroma is boosted by 20%', () => {
+    const stats = chromaGainStats([
+      { measuredLab: lab(50, 48, 0), refLab: lab(50, 40, 0), weight: 1 },
+      { measuredLab: lab(60, 0, 36), refLab: lab(60, 0, 30), weight: 3 },
+    ]);
+    expect(stats.gain).toBeCloseTo(120, 9);
+    expect(stats.gainTarget).toBeCloseTo(120, 9);
+  });
+
+  it('compares against the standard reference when the target is adjusted', () => {
+    const stats = chromaGainStats([
+      { measuredLab: lab(50, 48, 0), refLab: lab(50, 48, 0), standardRefLab: lab(50, 40, 0), weight: 1 },
+    ]);
+    expect(stats.gain).toBeCloseTo(120, 9);
+    expect(stats.gainTarget).toBeCloseTo(100, 9);
+  });
+
+  it('ignores zero weights and neutral patches', () => {
+    const stats = chromaGainStats([
+      { measuredLab: lab(50, 0, 0), refLab: lab(50, 0, 0), weight: 1 },
+      { measuredLab: lab(50, 80, 0), refLab: lab(50, 40, 0), weight: 0 },
+      { measuredLab: lab(50, 40, 0), refLab: lab(50, 40, 0), weight: 2 },
+    ]);
+    expect(stats.count).toBe(1);
+    expect(stats.gain).toBeCloseTo(100, 9);
+  });
+
+  it('returns a safe NaN when nothing contributes', () => {
+    const stats = chromaGainStats([]);
+    expect(stats.count).toBe(0);
+    expect(Number.isNaN(stats.gain)).toBe(true);
+    expect(Number.isNaN(stats.gainTarget)).toBe(true);
   });
 });

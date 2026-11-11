@@ -388,6 +388,18 @@ function ColorCheckerView({ result }: { result: ColorCheckerResult | null }) {
     (fit.objective ?? 'de00') !== settings.objective ||
     (fit.weights ?? []).some((w, i) => Math.abs(w - settings.weights[i]) > 1e-9)
   );
+  const saturationGain = fit && typeof fit.saturationGain === 'number' && Number.isFinite(fit.saturationGain)
+    ? fit.saturationGain
+    : null;
+  const saturationTarget = fit && typeof fit.saturationGainTarget === 'number' && Number.isFinite(fit.saturationGainTarget)
+    ? fit.saturationGainTarget
+    : null;
+  const targetSaturation = fit?.targetSaturation ?? 100;
+  const saturationDeviation = saturationTarget === null ? null : saturationTarget - 100;
+  const saturationOff = saturationDeviation !== null && Math.abs(saturationDeviation) > 5;
+  const suggestedSaturation = saturationTarget !== null && saturationTarget > 1
+    ? Math.max(0, Math.min(200, Math.round((targetSaturation * 100) / saturationTarget)))
+    : null;
   return (
     <div className="flex h-full flex-col gap-3 overflow-auto scroll-thin sm:flex-row sm:overflow-hidden">
       <div className="w-full shrink-0 space-y-2 overflow-auto scroll-thin sm:w-[260px] sm:overflow-y-auto">
@@ -447,12 +459,36 @@ function ColorCheckerView({ result }: { result: ColorCheckerResult | null }) {
               {showStandard ? <span>标准 <span className="mono text-ink-200">{fit.meanDE00Standard?.toFixed(3)}</span></span> : null}
               <span>max <span className="mono" style={{ color: fit.maxDE00 <= 5 ? '#7fe3ae' : '#ffca7a' }}>{fit.maxDE00.toFixed(3)}</span></span>
               <span>|ΔC'| <span className="mono text-ink-200">{fit.meanAbsDC.toFixed(3)}</span> · |ΔH'| <span className="mono text-ink-200">{(fit.meanAbsDH ?? 0).toFixed(3)}</span></span>
+              {saturationGain !== null ? (
+                <span
+                  data-testid="cc-saturation"
+                  title={`Imatest Chroma%：前 18 个彩色块中参与拟合块的加权平均 C* 比（n=${fit.saturationCount ?? 0}）；100% = 与标准参考一致`}
+                >
+                  饱和度{' '}
+                  <span className={`mono ${saturationOff ? 'text-[#ffca7a]' : 'text-ink-200'}`}>{saturationGain.toFixed(1)}%</span>
+                  <span className="text-ink-500">
+                    （目标 {targetSaturation}%
+                    {targetSaturation !== 100 && saturationTarget !== null
+                      ? ` · 实测/目标 ${saturationTarget.toFixed(1)}%`
+                      : ''}
+                    ）
+                  </span>
+                </span>
+              ) : null}
               <span>{fit.method === 'chroma-optimized' ? '色度优先优化' : fit.method === 'de00-optimized' ? 'ΔE00 优化' : '最小二乘'}</span>
               {fit.wb ? <span>WB <span className="mono text-ink-200">R {fit.wb.multipliers[0].toFixed(2)} / B {fit.wb.multipliers[3].toFixed(2)}</span></span> : null}
               <Button className="btn-xs ml-auto" variant="primary" onClick={applyFittedCcm}>应用 CCM</Button>
             </div>
             {settingsChanged ? (
               <div className="mt-1 text-[10px] leading-4 text-[#ffca7a]">权重或目标已改变，请重新拟合；当前结果使用旧设置。</div>
+            ) : null}
+            {saturationOff && saturationGain !== null && saturationDeviation !== null ? (
+              <div className="mt-1 text-[10px] leading-4 text-[#ffca7a]" data-testid="cc-saturation-note">
+                拟合后饱和度 {saturationGain.toFixed(0)}%，{saturationDeviation > 0 ? '高于' : '低于'}目标 {Math.abs(saturationDeviation).toFixed(0)} 个百分点
+                {suggestedSaturation !== null && (fit.gamutClippedCount ?? 0) === 0
+                  ? `；可把目标饱和度调到约 ${suggestedSaturation}% 后重新拟合`
+                  : ''}。
+              </div>
             ) : null}
             {fit.warnings.length ? (
               <div className="mt-1 text-[10px] leading-4 text-[#ffca7a]">{fit.warnings.join(' · ')}</div>

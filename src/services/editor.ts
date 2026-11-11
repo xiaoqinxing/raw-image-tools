@@ -740,6 +740,7 @@ function projectColorChecker(cc: import('../core/types').ColorCheckerSession): i
     weights: undefined,
     targetSaturation: undefined,
     targetHue: undefined,
+    saturationGainTarget: undefined,
     objective: undefined,
     samples: cc.fit.samples?.map((sample) => ({ ...sample, weight: 1 })),
     patches: cc.fit.patches.map((patch) => ({ ...patch, weight: undefined })),

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { deltaE00, deltaE00Parts, labToLinearSrgb, labToLch, lchToLab, linearSrgbToLab, srgbDecode, srgbEncode } from '../../src/core/color/lab';
+import { deltaE00, deltaE00Parts, labToLinearSrgb, labToLch, lchToLab, linearSrgbToLab, srgb8ToLab, srgbDecode, srgbEncode } from '../../src/core/color/lab';
 import { adjustReferenceTargets, gamutMapLab } from '../../src/core/color/target';
-import { srgbABEnvelope } from '../../src/core/color/gamut';
+import { abSliceColor, srgbABEnvelope, srgbABSlice, srgbChromaLimitAtL } from '../../src/core/color/gamut';
 import { bradfordAdaptation, inverse3, mul3, mul3Vec, D50_XY, D65_XY, deriveCscFromDng, IDENTITY3 } from '../../src/core/color/matrices';
 
 describe('color math', () => {
@@ -123,5 +123,60 @@ describe('LCh and target adjustment', () => {
     const parts = deltaE00Parts([50, 40, 0], [50, -40, 0]);
     expect(parts.dEChroma).toBeGreaterThan(0);
     expect(parts.dEChroma).toBeLessThan(parts.dE00 + 1e-9);
+  });
+});
+
+describe('sRGB a*b* slice background', () => {
+  const L = 50;
+  const limit = srgbChromaLimitAtL(L);
+
+  it('paints the neutral axis as the L*50 grey', () => {
+    const [r, g, b] = abSliceColor(0, 0, L, limit);
+    expect(r).toBe(g);
+    expect(g).toBe(b);
+    expect(r).toBeGreaterThan(115);
+    expect(r).toBeLessThan(123);
+  });
+
+  it('keeps in-gamut positions at the requested a* and b*', () => {
+    const rgb = abSliceColor(30, 20, L, limit);
+    const lab = srgb8ToLab(rgb[0], rgb[1], rgb[2]);
+    expect(Math.abs(lab[1] - 30)).toBeLessThan(1);
+    expect(Math.abs(lab[2] - 20)).toBeLessThan(1);
+  });
+
+  it('clamps out-of-gamut chroma while keeping hue and L*', () => {
+    const rgb = abSliceColor(120, -120, L, limit);
+    expect(rgb.every((v) => Number.isFinite(v) && v >= 0 && v <= 255)).toBe(true);
+    const lab = srgb8ToLab(rgb[0], rgb[1], rgb[2]);
+    expect(Math.hypot(lab[1], lab[2])).toBeLessThan(Math.hypot(120, 120));
+    expect(Math.abs(lab[0] - L)).toBeLessThan(1);
+    const requested = (Math.atan2(-120, 120) * 180) / Math.PI;
+    const rendered = (Math.atan2(lab[2], lab[1]) * 180) / Math.PI;
+    expect(Math.abs(rendered - requested)).toBeLessThan(2);
+  });
+
+  it('handles the L* extremes without NaN', () => {
+    for (const [a, b] of [[0, 0], [80, 60], [-90, 40]] as Array<[number, number]>) {
+      for (const lightness of [0, 100]) {
+        const rgb = abSliceColor(a, b, lightness);
+        expect(rgb.every((v) => Number.isFinite(v) && v >= 0 && v <= 255)).toBe(true);
+      }
+    }
+  });
+
+  it('builds an in-gamut slice outline at the chosen L*', () => {
+    const points = srgbABSlice(L, 72);
+    expect(points.length).toBeGreaterThan(60);
+    for (const [a, b] of points) {
+      const linear = labToLinearSrgb([L, a, b]);
+      expect(linear.every((v) => v >= -1e-3 && v <= 1 + 1e-3)).toBe(true);
+    }
+  });
+
+  it('keeps positive finite chroma limits for chromatic hues', () => {
+    const lut = srgbChromaLimitAtL(L, 24);
+    expect(lut.length).toBe(24);
+    expect([...lut].every((v) => Number.isFinite(v) && v > 0)).toBe(true);
   });
 });
