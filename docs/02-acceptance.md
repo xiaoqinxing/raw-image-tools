@@ -1,10 +1,11 @@
 # 实现与验收记录
 
-日期：2026-11-07
-版本：0.1.0（初始验收基线；当前版本由构建自动生成）
-环境：Linux，Node 18.19.1，无头 Chromium（headless shell 1194），
+日期：2026-11-07（初始基线）；2026-11-17 增补色调曲线验收
+版本：0.1.0（当前版本由构建自动生成）
+环境：Linux，Node 22.22.3，无头 Chromium（headless shell 1248），
 `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader`，
 viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
+性能表沿用 2026-11-07 基线；本次增补只更新功能与测试计数。
 
 > 软件渲染只用于功能与内存验证；显示 present 的墙钟时间不代表硬件 WebGL2 性能。
 > 表中把管线命令/CPU 耗时与包含 present/读回的墙钟时间分开记录。
@@ -13,7 +14,7 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 
 | 套件 | 数量 | 结果 |
 |------|------|------|
-| Vitest 单元/数值 | 144 | 全部通过 |
+| Vitest 单元/数值 | 154 | 全部通过 |
 | Playwright E2E：DNG 导入 / 阶段 / 16-bit 导出 / 工程保存 | 1 | 通过 |
 | Playwright E2E：裸 RAW 导入 + 错误配置 | 1 | 通过 |
 | Playwright E2E：裸 RAW 黑白电平随位宽默认 | 1 | 通过 |
@@ -34,7 +35,8 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 | Playwright E2E：Gamma 线性显示与锐化 SKIP | 1 | 通过 |
 | Playwright E2E：数字增益阶段 + CSC YUV 调整/色域标准 | 2 | 通过 |
 | Playwright E2E：ROI 默认全图 + 框选限制 | 1 | 通过 |
-| **E2E 合计** | **23** | **全部通过** |
+| Playwright E2E：色调曲线编辑 / 单通道 / 重置 / Gamma 门控 | 1 | 通过 |
+| **E2E 合计** | **24** | **全部通过** |
 
 覆盖的数值测试：
 
@@ -51,7 +53,9 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 - 分析：直方图、SNR（高斯噪声 <0.2 dB）、MTF50（高斯模糊斜边误差 <5%）、白噪声频谱平坦度、CCM 最小二乘恢复（mean ΔE00 < 1）。
 - ColorChecker：合成色卡 mean ΔE00 ≈ 0.01，max ≈ 0.03。
 - 悬停读数显示编码：raw-cfa gamma 2.2、camera/linear sRGB 传递函数、display sRGB 保持、线性预览与 8-bit 映射。
-- 阶段依赖：上游 bypass 时下游阶段标记 SKIP；Gamma bypass 时 USM 不执行。
+- 阶段依赖：上游 bypass 时下游阶段标记 SKIP；Gamma bypass 时色调曲线与 USM 不执行。
+- 阶段缓存：缓存键只包含当前阶段及上游参数；修改色调曲线不会重算 levels/demosaic/CCM/Gamma。
+- 色调曲线：恒等曲线逐点精确；S 曲线通过控制点、单调且落在 0..1；端点/排序/clamp/去重/点数上限；LUT 与逐点求值一致；>1 高光透传。
 - 构建信息：版本号 = package major.minor + Git 提交数；git log 解析与异常行过滤。
 - 主题调色板：`src/styles.css` 的 CSS 变量与 `src/ui/palette.ts` 保持一致；所有文字色对 `ink-950/900/850/800` 的对比度 ≥ 4.5:1，主文字 ≥ 12:1；组件中不允许出现低对比 `text-ink-*`。
 
@@ -106,11 +110,11 @@ AHD Quality：
 | DNG 导入 + DNG 专属标签 | 通过 | Opcode/Linearization 未执行，提示 |
 | 裸 RAW：8/10/12/14/16、packed/unpacked、LE/BE、stride/offset/active/CFA | 通过 | 单元测试覆盖；黑白电平默认随位宽 |
 | DNG 缺 BlackLevel/WhiteLevel | 通过 | 按位宽默认值填充并给出警告 |
-| 固定 11 阶段、逐阶段 bypass/调参/查看 | 通过 | 预览与全分辨率 |
+| 固定 12 阶段、逐阶段 bypass/调参/查看 | 通过 | 预览与全分辨率；色调曲线为独立显示域阶段 |
 | 阶段 A/B / 快照 A/B / 闪烁 / 可拖分割线 | 通过 | 手动验证 + 差异 E2E |
 | 平场、灰点 WB、数字增益、guided/bilateral 降噪 | 通过 | 平场兼容性检查；灰点读取线性 RAW 阶段；数字增益 E2E |
 | Fast MHC/Bilinear GPU；Quality AHD CPU | 通过 | AHD 为净室近似 |
-| CCM 相机 Profile 手动/DNG/拟合、CSC YUV 调整、USM、裁剪、8/16-bit PNG、任意阶段导出 | 通过 | 16-bit 无 ICC；RAW 阶段灰度；CSC E2E |
+| CCM 相机 Profile 手动/DNG/拟合、色调曲线、CSC YUV 调整、USM、裁剪、8/16-bit PNG、任意阶段导出 | 通过 | 16-bit 无 ICC；RAW 阶段灰度；曲线 E2E；CSC E2E |
 | 直方图/悬停读数/SNR/MTF/波形/噪声频谱/ColorChecker/差异 | 通过 | 差异为 A vs bypass/快照；分析面板默认折叠，展开后随参数或共享 ROI 自动刷新 |
 | 分析面板高度 | 通过 | 展开后拖动上边缘调整；↑/↓、Home/End、双击或 Enter 复位；最小 160px，并为画布保留空间 |
 | 直方图坐标 | 通过 | 横轴固定 0–1 亮度值，纵轴像素数量自适应；显示 ROI 内 R/G/B 均值与比例 |

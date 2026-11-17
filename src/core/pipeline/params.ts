@@ -9,6 +9,7 @@ import type {
   Vec4,
 } from '../types';
 import { deriveCscFromDng, IDENTITY3, matrixNearIdentity, mul3, sanitizeMat3 } from '../color/matrices';
+import { createIdentityToneCurvePoints, sanitizeToneCurvePointsSet } from '../color/tone-curve';
 import { cscTransform, type CscTransform } from '../color/yuv';
 import { defaultLevelsForBitDepth } from '../raw/levels';
 
@@ -21,6 +22,7 @@ export const STAGE_ORDER: StageId[] = [
   'denoise',
   'ccm',
   'gamma',
+  'toneCurve',
   'csc',
   'sharpen',
 ];
@@ -34,6 +36,7 @@ export const STAGE_LABELS: Record<StageId, string> = {
   denoise: '降噪',
   ccm: 'CCM 相机 → 工作 RGB',
   gamma: 'Gamma',
+  toneCurve: '色调曲线',
   csc: 'CSC RGB → YUV 调整',
   sharpen: 'USM 锐化',
 };
@@ -48,6 +51,7 @@ export const STAGE_SHORT_LABELS: Record<StageId, string> = {
   denoise: '降噪后',
   ccm: 'CCM 后',
   gamma: 'Gamma 后',
+  toneCurve: '曲线后',
   csc: 'CSC 后',
   sharpen: '最终',
 };
@@ -61,6 +65,7 @@ export const STAGE_DOMAIN: Record<StageId, Domain> = {
   denoise: 'camera-rgb',
   ccm: 'linear-srgb',
   gamma: 'display-srgb',
+  toneCurve: 'display-srgb',
   csc: 'display-srgb',
   sharpen: 'display-srgb',
 };
@@ -74,6 +79,7 @@ export const STAGE_HALO: Record<StageId, number> = {
   denoise: 5,
   ccm: 0,
   gamma: 0,
+  toneCurve: 0,
   csc: 0,
   sharpen: 9,
 };
@@ -160,6 +166,10 @@ export function createDefaultParams(raw?: RawImage): PipelineParams {
       bypass: false,
       mode: 'srgb',
     },
+    toneCurve: {
+      bypass: true,
+      points: createIdentityToneCurvePoints(),
+    },
     csc: {
       bypass: false,
       standard: 'bt709',
@@ -206,6 +216,7 @@ export function stageIsActive(p: PipelineParams, stage: StageId, hasFlat: boolea
   if (stage === 'denoise' || stage === 'ccm' || stage === 'gamma') {
     return !p.demosaic.bypass;
   }
+  if (stage === 'toneCurve') return !p.demosaic.bypass && !p.gamma.bypass;
   if (stage === 'csc') return !p.demosaic.bypass && !p.gamma.bypass;
   if (stage === 'sharpen') return !p.demosaic.bypass && !p.gamma.bypass;
   return false;
@@ -269,10 +280,12 @@ export function migrateParams(input: unknown): PipelineParams {
     denoise: stageValue(base.denoise, legacy.denoise),
     ccm: stageValue(base.ccm, legacy.ccm),
     gamma: stageValue(base.gamma, legacy.gamma),
+    toneCurve: stageValue(base.toneCurve, legacy.toneCurve),
     csc: isV1 ? { ...base.csc } : stageValue(base.csc, legacy.csc),
     sharpen: stageValue(base.sharpen, legacy.sharpen),
     output: stageValue(base.output, legacy.output),
   };
+  merged.toneCurve.points = sanitizeToneCurvePointsSet(merged.toneCurve.points);
 
   if (!isV1) {
     merged.digitalGain = {

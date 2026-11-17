@@ -9,6 +9,7 @@ import type {
 } from '../core/types';
 import { STAGE_DOMAIN, STAGE_ORDER, effectiveCcm, effectiveCscTransform, hashString, stableStringify } from '../core/pipeline/params';
 import { ccmFromTotal } from '../core/color/matrices';
+import { TONE_CURVE_LUT_SIZE, buildToneCurveLut, toneCurveIsIdentity } from '../core/color/tone-curve';
 import { demosaicAHD } from '../core/demosaic/ahd';
 import { defaultLevelsForBitDepth } from '../core/raw/levels';
 import { previewFactor, resourceFactor, scaleRaw } from '../core/raw/scale';
@@ -29,6 +30,7 @@ import {
   LUMA_FRAG,
   MATRIX_FRAG,
   MOMENTS_FRAG,
+  TONE_CURVE_FRAG,
   USM_COMBINE_FRAG,
   WB_FRAG,
 } from './shaders';
@@ -153,6 +155,8 @@ export class Renderer {
   private rawFullTex: WebGLTexture | null = null;
   private flatPreviewTex: WebGLTexture | null = null;
   private flatFullTex: WebGLTexture | null = null;
+  private toneCurveTex: WebGLTexture | null = null;
+  private toneCurveKey = '';
   private previewCache = newCache();
   private previewBCache = newCache();
   private fullCache = newCache();
@@ -261,6 +265,45 @@ export class Renderer {
     return tex;
   }
 
+  private ensureToneCurveTexture(params: PipelineParams): { texture: WebGLTexture; size: number } {
+    const key = stableStringify(params.toneCurve.points);
+    const size = Math.min(TONE_CURVE_LUT_SIZE, this.maxTextureSize);
+    if (this.toneCurveTex && this.toneCurveKey === key) {
+      return { texture: this.toneCurveTex, size };
+    }
+    const gl = this.gl;
+    const rows = [
+      params.toneCurve.points.rgb,
+      params.toneCurve.points.r,
+      params.toneCurve.points.g,
+      params.toneCurve.points.b,
+    ];
+    const data = new Float32Array(size * 4 * 4);
+    for (let row = 0; row < 4; row++) {
+      const lut = buildToneCurveLut(rows[row], size);
+      for (let i = 0; i < size; i++) {
+        const o = (row * size + i) * 4;
+        data[o] = lut[i];
+        data[o + 1] = lut[i];
+        data[o + 2] = lut[i];
+        data[o + 3] = 1;
+      }
+    }
+    const tex = gl.createTexture();
+    if (!tex) throw new Error('无法创建色调曲线 LUT 纹理');
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, size, 4, 0, gl.RGBA, gl.FLOAT, data);
+    if (this.toneCurveTex) gl.deleteTexture(this.toneCurveTex);
+    this.toneCurveTex = tex;
+    this.toneCurveKey = key;
+    return { texture: tex, size };
+  }
+
   private createTexture(width: number, height: number, kind: 'r16f' | 'rgba16f'): RenderTexture {
     const gl = this.gl;
     const texture = gl.createTexture();
@@ -302,10 +345,13 @@ export class Renderer {
     if (this.rawFullTex) gl.deleteTexture(this.rawFullTex);
     if (this.flatPreviewTex) gl.deleteTexture(this.flatPreviewTex);
     if (this.flatFullTex) gl.deleteTexture(this.flatFullTex);
+    if (this.toneCurveTex) gl.deleteTexture(this.toneCurveTex);
     this.rawPreviewTex = null;
     this.rawFullTex = null;
     this.flatPreviewTex = null;
     this.flatFullTex = null;
+    this.toneCurveTex = null;
+    this.toneCurveKey = '';
     for (const cache of [this.previewCache, this.previewBCache, this.fullCache]) {
       for (const t of Object.values(cache.stages)) this.disposeTex(t);
       for (const t of cache.temps.values()) this.disposeTex(t);
@@ -462,6 +508,7 @@ export class Renderer {
     if (stage === 'denoise') return !params.denoise.bypass && !params.demosaic.bypass;
     if (stage === 'ccm') return !params.ccm.bypass && !params.demosaic.bypass;
     if (stage === 'gamma') return !params.gamma.bypass && !params.demosaic.bypass;
+    if (stage === 'toneCurve') return !params.toneCurve.bypass && !params.gamma.bypass && !params.demosaic.bypass;
     if (stage === 'csc') return !params.csc.bypass && !params.gamma.bypass && !params.demosaic.bypass;
     if (stage === 'sharpen') return !params.sharpen.bypass && !params.gamma.bypass && !params.demosaic.bypass;
     return false;
@@ -470,6 +517,10 @@ export class Renderer {
   private stageKey(params: PipelineParams, stage: StageId, width: number, height: number, preview: boolean): string {
     const idx = STAGE_ORDER.indexOf(stage);
     const active = STAGE_ORDER.slice(0, idx + 1).map((s) => this.stageActive(params, s));
+    // Only include params up to this stage. A downstream edit (for example
+    // tone curve) must not invalidate levels/demosaic caches.
+    const upstream: Partial<Record<StageId, unknown>> = {};
+    for (let i = 0; i <= idx; i++) upstream[STAGE_ORDER[i]] = params[STAGE_ORDER[i]];
     return hashString(stableStringify({
       raw: this.raw?.id,
       flat: this.flat?.id,
@@ -478,18 +529,7 @@ export class Renderer {
       height,
       active,
       stage,
-      params: {
-        levels: params.levels,
-        flat: params.flat,
-        wb: params.wb,
-        digitalGain: params.digitalGain,
-        demosaic: params.demosaic,
-        denoise: params.denoise,
-        ccm: params.ccm,
-        csc: params.csc,
-        gamma: params.gamma,
-        sharpen: params.sharpen,
-      },
+      params: upstream,
     }));
   }
 
@@ -688,6 +728,21 @@ export class Renderer {
       this.bindTex(p, 'uIn', input.texture, 0);
       gl.uniform2i(this.u(p, 'uSize'), width, height);
       gl.uniform1i(this.u(p, 'uMode'), params.gamma.mode === 'srgb' ? 0 : params.gamma.mode === 'gamma22' ? 1 : 2);
+      this.draw();
+      return out;
+    }
+    if (stage === 'toneCurve') {
+      const lut = this.ensureToneCurveTexture(params);
+      const p = this.use('toneCurve', TONE_CURVE_FRAG);
+      this.target(out);
+      this.bindTex(p, 'uIn', input.texture, 0);
+      this.bindTex(p, 'uLut', lut.texture, 1);
+      gl.uniform2i(this.u(p, 'uSize'), width, height);
+      gl.uniform1i(this.u(p, 'uLutSize'), lut.size);
+      gl.uniform1i(this.u(p, 'uComposite'), toneCurveIsIdentity(params.toneCurve.points.rgb) ? 0 : 1);
+      gl.uniform1i(this.u(p, 'uR'), toneCurveIsIdentity(params.toneCurve.points.r) ? 0 : 1);
+      gl.uniform1i(this.u(p, 'uG'), toneCurveIsIdentity(params.toneCurve.points.g) ? 0 : 1);
+      gl.uniform1i(this.u(p, 'uB'), toneCurveIsIdentity(params.toneCurve.points.b) ? 0 : 1);
       this.draw();
       return out;
     }

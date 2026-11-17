@@ -33,7 +33,7 @@
 ### 1.1 首版目标
 
 - 导入 DNG 与可配置裸 RAW；裸 RAW 配置错误可定位、可自动探测建议。
-- 固定 11 级 ISP 管线，顺序不可重排；每级可 bypass、调参、查看中间输出。
+- 固定 12 级 ISP 管线，顺序不可重排；每级可 bypass、调参、查看中间输出。
 - 平场、灰点白平衡、数字增益、CCM 相机 Profile/ColorChecker 拟合、CSC YUV 调整、Fast/Quality demosaic、降噪、USM、sRGB 输出。
 - 直方图、像素探针、SNR、MTF、ΔE00/ΔC、波形、噪声频谱、差异图。
 - 2–4 图对比、同步缩放/平移、参数快照；工程文件/预设导入导出。
@@ -372,21 +372,28 @@ interface PipelineParams {
 
   ccm: {
     bypass: boolean;
-    source: 'identity' | 'manual' | 'fit';
+    source: 'dng' | 'identity' | 'manual' | 'fit';
     matrix: Mat3;
     fitId?: string;
   };
 
   csc: {
     bypass: boolean;
-    source: 'dng' | 'manual' | 'identity';
-    matrix: Mat3;
-    adaptation: 'bradford' | 'none';
+    standard: 'bt709' | 'bt601' | 'bt2020';
+    saturation: number;              // 0..200 (%)
+    contrast: number;                // 0..200 (%)
+    hue: number;                     // -180..180
+    brightness: number;              // -100..100
   };
 
   gamma: {
     bypass: boolean;
     mode: 'srgb' | 'gamma22' | 'linear';
+  };
+
+  toneCurve: {
+    bypass: boolean;
+    points: Record<'rgb' | 'r' | 'g' | 'b', Point[]>;
   };
 
   sharpen: {
@@ -416,9 +423,10 @@ interface PipelineParams {
 | 6 | denoise | camera-rgb → camera-rgb | 是 | radius | 亮度/色度分离，guided/bilateral |
 | 7 | ccm | camera-rgb → linear-srgb | 是 | 0 | 相机 Profile：DNG ForwardMatrix/ColorMatrix，默认非单位阵 |
 | 8 | gamma | linear-srgb → display-srgb | 是 | 0 | sRGB EOTF 或 gamma 2.2 |
-| 9 | csc | display-srgb → display-srgb | 是 | 0 | RGB→YUV→调整→RGB；标准矩阵 + 4 项调整 |
-| 10 | sharpen | display-srgb → display-srgb | 是 | radius | USM，gamma 域，亮度通道 |
-| 11 | output | display-srgb → PNG | CPU | 0 | 裁剪、8/16-bit 量化、编码 |
+| 9 | toneCurve | display-srgb → display-srgb | 是 | 0 | RGB 复合 + R/G/B 单通道单调三次曲线；LUT ≤4096；依赖 gamma |
+| 10 | csc | display-srgb → display-srgb | 是 | 0 | RGB→YUV→调整→RGB；标准矩阵 + 4 项调整 |
+| 11 | sharpen | display-srgb → display-srgb | 是 | radius | USM，gamma 域，亮度通道 |
+| 12 | output | display-srgb → PNG | CPU | 0 | 裁剪、8/16-bit 量化、编码 |
 
 **缓存键：**
 
@@ -638,8 +646,8 @@ interface DiffResult extends AnalysisMeta {
 - Stage 1 输出：`F16` 归一化 CFA；可选 clamp 负数。
 - Stage 2/3：CFA F16。
 - Stage 4 输出：camera RGB F16（3 通道存 RGBA16F，A 未用）。
-- Stage 7/9：camera RGB → linear sRGB → display sRGB F16；矩阵用 float32 常量，CPU 参考用 float64。
-- Stage 8/9：display sRGB F16。
+- Stage 7/10：camera RGB → linear sRGB → display sRGB F16；矩阵用 float32 常量，CPU 参考用 float64。
+- Stage 8/9/10：display sRGB F16。
 - 量化：PNG 8-bit 用 `round(clamp(v,0,1)*255)`；16-bit 用 `round(v*65535)`。量化前不额外抖动（保持可复现），可选 dither 后续再加。
 
 ### 5.2 Stage 1：黑电平 + 白电平
@@ -767,10 +775,10 @@ R/B 在 G、R 在 B 的核按论文方向旋转；实现中用 4 个方向变体
 - 输出 RGB F16；不做 BM3D；不对 RAW CFA 直接降噪。
 - 注意：管线顺序固定在 CCM 之前，因此在线性相机 RGB 上处理；UI 明确标注“线性域降噪”，不假装是感知域。
 
-### 5.7 Stage 7：CCM（相机 Profile）与 Stage 9：CSC（YUV 调整）
+### 5.7 Stage 7：CCM（相机 Profile）与 Stage 10：CSC（YUV 调整）
 
 - CCM：相机 RGB → 线性 sRGB 的输入 Profile。优先 DNG `ForwardMatrix`，否则 `ColorMatrix` 求逆并按校准光源做 Bradford 适应；缺失时单位阵 + 警告。可手动覆盖或由 ColorChecker 拟合。
-- CSC：在 Gamma 之后、display-sRGB 域执行 `RGB → YUV → 调整 → YUV → RGB`。标准矩阵由色域决定（BT.709 / BT.601 625-line / BT.2020），不可手改。
+- CSC：在 Gamma 与色调曲线之后、display-sRGB 域执行 `RGB → YUV → 调整 → YUV → RGB`。标准矩阵由色域决定（BT.709 / BT.601 625-line / BT.2020），不可手改。
 - 四个调整在 YUV 域合成一个仿射变换：
   \[
   Y' = c(Y-0.5)+0.5+b,\quad Cb'=s\cos\theta\,Cb-s\sin\theta\,Cr,\quad Cr'=s\sin\theta\,Cb+s\cos\theta\,Cr
@@ -799,7 +807,18 @@ V=\begin{cases}
 - 分析 MTF/SNR 时若阶段是 display-srgb，先做逆 EOTF 回线性。
 - 内部不做 ICC/P3/HDR；输出 PNG 带 sRGB chunk。
 
-### 5.9 Stage 9：USM 锐化（gamma 域）
+### 5.9 Stage 9：色调曲线（display-sRGB）
+
+- 位置：Gamma 之后、CSC 之前；依赖 Gamma 与去马赛克。Gamma bypass 时曲线阶段标记 `SKIP`，不把曲线偷偷应用到线性值。
+- 定义：每个通道一条单调三次曲线，控制点 `(x,y)` 在 display-sRGB 的 0..1 域；端点 x 固定为 0/1，y 可调（抬黑/压白），内部点可增删拖动。
+- 插值：Fritsch–Carlson 单调三次 Hermite，避免普通三次样条在控制点附近过冲。
+- 应用顺序：先 RGB 复合曲线，再 R/G/B 单通道曲线；单通道曲线会改变颜色平衡。
+- 域外：`x<0` 或 `x>1` 原样透传，保留 >1 高光和剪切提示；不在曲线阶段 clamp。
+- GPU：将四条曲线烘焙为 `N×4` 的 RGBA32F LUT（默认 `N=4096`，并受 `MAX_TEXTURE_SIZE` 限制），用 NEAREST `texelFetch` 取值；不把 Gamma 与曲线融合，保持阶段缓存、独立 bypass 和中间结果可见。
+- 精度：曲线本身用双精度采样，LUT 只影响 GPU 取值的离散化；单测覆盖恒等、过点、单调性、端点与 LUT 一致性。
+- 限制：不含 Lightroom 的参数曲线分区、HSL/颜色分级或局部蒙版。
+
+### 5.10 Stage 10：USM 锐化（gamma 域）
 
 - 在 display-srgb 上计算亮度：
   \[
@@ -822,7 +841,7 @@ V=\begin{cases}
 - 阈值默认 0；强度 0..200%；半径 0.5..3 px。
 - 高斯可分离，halo = ceil(3σ)。
 
-### 5.10 Stage 11：输出
+### 5.11 Stage 12：输出
 
 - 裁剪：传感器坐标 `Rect`；显示时按 orientation 旋转，导出时先裁剪再旋转（或先旋转再映射裁剪，二者需测试一致）。
 - 8-bit：`round(clamp(v,0,1)*255)`；16-bit：`round(clamp(v,0,1)*65535)`，big-endian PNG。
@@ -1159,6 +1178,7 @@ d = |a-b|\cdot g
 | CCM（相机 Profile） | 5–10ms | 1 个 3×3 pass |
 | CSC（YUV 调整） | 5–10ms | 1 个 3×3 + offset pass |
 | 数字增益（可选） | 2–5ms | 1 个 R16F pass，默认 BYP |
+| toneCurve（可选） | 3–8ms | 1 个 LUT 采样 pass，默认 BYP |
 | gamma + USM | 40–70ms | gamma + 2 次高斯 + 合成 |
 | 合成/显示 | 5–10ms | 缩放/方向 |
 | 调度/同步/开销 | 20–50ms | 纹理分配、fence |
@@ -1422,7 +1442,7 @@ d = |a-b|\cdot g
 ### Phase 2 — GPU 核心管线 + Fast demosaic（L）
 
 - Render Worker + OffscreenCanvas + WebGL2 渲染器；RGBA16F；纹理/缓存。
-- Stage 1–4（levels/flat/WB/digitalGain）+ Stage 5 Fast（Bilinear/MHC）+ Stage 7–9（CCM/Gamma/CSC）+ Stage 11 基础输出。
+- Stage 1–4（levels/flat/WB/digitalGain）+ Stage 5 Fast（Bilinear/MHC）+ Stage 7–10（CCM/Gamma/Tone Curve/CSC）+ Stage 12 基础输出。
 - 参数 schema/defaults/bypass；阶段查看；预览 2048；全分辨率 Fast；A/B（stage bypass）；8-bit PNG。
 - 参考实现对拍；MHC PSNR；预览/全分辨率计时。
 - **退出：** 固定管线前段可运行；预览 <150ms；24MP Fast 全分辨率 <1s（不含 PNG/Quality）；PSNR/误差达标。

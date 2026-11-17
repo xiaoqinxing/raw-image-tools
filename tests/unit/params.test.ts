@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { bypassStage, createDefaultParams, digitalGainFor, effectiveCcm, effectiveCscTransform, fromPresetParams, migrateParams, paramsHash, stageIsActive, toPresetParams } from '../../src/core/pipeline/params';
+import { STAGE_ORDER, bypassStage, createDefaultParams, digitalGainFor, effectiveCcm, effectiveCscTransform, fromPresetParams, migrateParams, paramsHash, stageIsActive, toPresetParams } from '../../src/core/pipeline/params';
 import { IDENTITY3 } from '../../src/core/color/matrices';
+import { createIdentityToneCurvePoints } from '../../src/core/color/tone-curve';
 
 describe('pipeline params', () => {
   it('creates sane defaults without RAW metadata', () => {
@@ -18,6 +19,10 @@ describe('pipeline params', () => {
     expect(p.csc.contrast).toBe(100);
     expect(p.csc.hue).toBe(0);
     expect(p.csc.brightness).toBe(0);
+    expect(p.toneCurve.bypass).toBe(true);
+    expect(p.toneCurve.points).toEqual(createIdentityToneCurvePoints());
+    expect(STAGE_ORDER.indexOf('toneCurve')).toBe(STAGE_ORDER.indexOf('gamma') + 1);
+    expect(STAGE_ORDER.indexOf('toneCurve')).toBe(STAGE_ORDER.indexOf('csc') - 1);
   });
 
   it('applies global digital gain only when the stage is enabled', () => {
@@ -48,6 +53,10 @@ describe('pipeline params', () => {
     p.gamma.bypass = true;
     expect(stageIsActive(p, 'sharpen', false)).toBe(false);
     expect(stageIsActive(p, 'csc', false)).toBe(false);
+    expect(stageIsActive(p, 'toneCurve', false)).toBe(false);
+    p.gamma.bypass = false;
+    p.toneCurve.bypass = false;
+    expect(stageIsActive(p, 'toneCurve', false)).toBe(true);
     p.demosaic.bypass = true;
     expect(stageIsActive(p, 'csc', false)).toBe(false);
     expect(stageIsActive(p, 'levels', false)).toBe(true);
@@ -92,6 +101,28 @@ describe('pipeline params', () => {
     const neutral = effectiveCscTransform(a);
     expect(neutral.matrix).toEqual(IDENTITY3);
     expect(neutral.offset).toEqual([0, 0, 0]);
+  });
+
+  it('adds identity tone curves to older v2 params and sanitizes imported curves', () => {
+    const old = createDefaultParams();
+    delete (old as Partial<typeof old>).toneCurve;
+    const migrated = migrateParams(old);
+    expect(migrated.toneCurve.bypass).toBe(true);
+    expect(migrated.toneCurve.points).toEqual(createIdentityToneCurvePoints());
+
+    const withCurve = createDefaultParams();
+    withCurve.toneCurve.bypass = false;
+    withCurve.toneCurve.points.rgb = [
+      { x: 1, y: 1 },
+      { x: 0.5, y: 0.2 },
+      { x: 0, y: 0 },
+    ];
+    const sanitized = migrateParams(withCurve);
+    expect(sanitized.toneCurve.points.rgb).toEqual([
+      { x: 0, y: 0 },
+      { x: 0.5, y: 0.2 },
+      { x: 1, y: 1 },
+    ]);
   });
 
   it('migrates v1 CSC + CCM into the v2 camera profile and keeps the total color transform', () => {

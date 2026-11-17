@@ -5,15 +5,17 @@ import { deriveCscFromDng } from '../core/color/matrices';
 import { CSC_STANDARD_LABELS, CSC_STANDARDS } from '../core/color/yuv';
 import { applyFittedCcm, attachFlat, renderActive, updateStageAndRender, setStageBypassAndRender, fitColorChecker, savePreset, applyPreset, exportPresets, importPresets, deletePreset } from '../services/editor';
 import { Button, NumberField, Section, Segmented, SliderField, Toggle } from './controls';
-import type { Mat3, StageId, Vec4 } from '../core/types';
+import { ToneCurveEditor } from './ToneCurveEditor';
+import type { Mat3, Point, StageId, ToneCurveChannel, Vec4 } from '../core/types';
 import { IDENTITY3, matrixToString } from '../core/color/matrices';
+import { createIdentityToneCurvePoints } from '../core/color/tone-curve';
 
 function StageRow({ stage, index }: { stage: StageId; index: number }) {
   const doc = useActiveDoc();
   const selectedStage = useStore((s) => s.selectedStage);
   const setSelectedStage = useStore((s) => s.setSelectedStage);
   const setAnalysisStage = useStore((s) => s.setAnalysisStage);
-  const [open, setOpen] = React.useState(stage === 'levels' || stage === 'wb' || stage === 'digitalGain' || stage === 'demosaic' || stage === 'ccm' || stage === 'csc');
+  const [open, setOpen] = React.useState(stage === 'levels' || stage === 'wb' || stage === 'digitalGain' || stage === 'demosaic' || stage === 'ccm' || stage === 'toneCurve' || stage === 'csc');
   if (!doc) return null;
   const p = doc.params[stage] as { bypass: boolean };
   const runnable = stageIsActive(doc.params, stage, !!doc.flat);
@@ -106,6 +108,7 @@ function MatrixEditor({ value, onChange }: { value: Mat3; onChange: (v: Mat3) =>
 function StageControls({ stage }: { stage: StageId }) {
   const doc = useActiveDoc();
   const [flatInput] = React.useState(() => React.createRef<HTMLInputElement>());
+  const [curveChannel, setCurveChannel] = React.useState<ToneCurveChannel>('rgb');
   if (!doc) return null;
   const p = doc.params[stage] as any;
   const set = (patch: Record<string, unknown>) => updateStageAndRender(stage as keyof typeof doc.params, patch as never);
@@ -284,7 +287,35 @@ function StageControls({ stage }: { stage: StageId }) {
     return (
       <div className="space-y-2">
         <Segmented value={doc.params.gamma.mode} onChange={(v) => updateStageAndRender('gamma', { mode: v })} options={[{ value: 'srgb', label: 'sRGB' }, { value: 'gamma22', label: 'Gamma 2.2' }, { value: 'linear', label: 'Linear' }]} />
-        <div className="text-[11px] leading-4 text-ink-500">默认 sRGB 传输函数（线性→显示）。Gamma 阶段之后才做 USM。</div>
+        <div className="text-[11px] leading-4 text-ink-500">默认 sRGB 传输函数（线性→显示）。Gamma 之后依次做色调曲线、CSC 与 USM。</div>
+      </div>
+    );
+  }
+  if (stage === 'toneCurve') {
+    const curve = doc.params.toneCurve;
+    const setPoints = (next: Point[]) => {
+      updateStageAndRender('toneCurve', {
+        bypass: false,
+        points: { ...curve.points, [curveChannel]: next },
+      });
+    };
+    return (
+      <div className="space-y-2">
+        <ToneCurveEditor
+          points={curve.points[curveChannel]}
+          channel={curveChannel}
+          onChannelChange={setCurveChannel}
+          onChange={setPoints}
+        />
+        <div className="flex flex-wrap items-center gap-1">
+          <Button className="btn-xs" onClick={() => setPoints([{ x: 0, y: 0 }, { x: 1, y: 1 }])}>重置 {curveChannel.toUpperCase()}</Button>
+          <Button className="btn-xs" onClick={() => updateStageAndRender('toneCurve', { points: createIdentityToneCurvePoints(), bypass: false })}>全部重置</Button>
+          <span className="ml-auto mono text-[10px] text-ink-500">{curve.points[curveChannel].length} 点</span>
+        </div>
+        <div className="text-[11px] leading-4 text-ink-500">
+          在 Gamma 之后的显示域 0..1 上工作，先应用 RGB 复合曲线，再应用单通道曲线；&gt;1 高光保持原值，便于剪切提示。
+          {curve.bypass ? ' 当前 BYP，编辑曲线会自动启用。' : ''}
+        </div>
       </div>
     );
   }

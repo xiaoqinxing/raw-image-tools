@@ -22,6 +22,11 @@ export type Mat3 = [
 
 export type Vec4 = [number, number, number, number];
 
+export type ToneCurveChannel = 'rgb' | 'r' | 'g' | 'b';
+
+/** Control points are defined in the gamma-encoded display domain (0..1). */
+export type ToneCurvePoints = Record<ToneCurveChannel, Point[]>;
+
 export type StageId =
   | 'levels'
   | 'flat'
@@ -31,6 +36,7 @@ export type StageId =
   | 'denoise'
   | 'ccm'
   | 'gamma'
+  | 'toneCurve'
   | 'csc'
   | 'sharpen';
 
@@ -253,6 +259,11 @@ export interface PipelineParams {
   gamma: {
     bypass: boolean;
     mode: 'srgb' | 'gamma22' | 'linear';
+  };
+  toneCurve: {
+    bypass: boolean;
+    /** RGB composite curve plus optional per-channel curves, applied in this order. */
+    points: ToneCurvePoints;
   };
   sharpen: {
     bypass: boolean;

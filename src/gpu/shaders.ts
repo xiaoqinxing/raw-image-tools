@@ -351,6 +351,35 @@ void main() {
 }
 `;
 
+export const TONE_CURVE_FRAG = `${COMMON_HEADER}
+uniform sampler2D uIn;
+uniform highp sampler2D uLut;
+uniform ivec2 uSize;
+uniform int uLutSize;
+uniform int uComposite;
+uniform int uR;
+uniform int uG;
+uniform int uB;
+out vec4 outColor;
+
+float curveAt(int row, float x) {
+  if (x < 0.0 || x > 1.0) return x;
+  int i = int(round(x * float(uLutSize - 1)));
+  return texelFetch(uLut, ivec2(clamp(i, 0, uLutSize - 1), row), 0).r;
+}
+
+void main() {
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  if (p.x >= uSize.x || p.y >= uSize.y) discard;
+  vec3 c = texelFetch(uIn, p, 0).rgb;
+  if (uComposite == 1) c = vec3(curveAt(0, c.r), curveAt(0, c.g), curveAt(0, c.b));
+  if (uR == 1) c.r = curveAt(1, c.r);
+  if (uG == 1) c.g = curveAt(2, c.g);
+  if (uB == 1) c.b = curveAt(3, c.b);
+  outColor = vec4(c, 1.0);
+}
+`;
+
 export const LUMA_FRAG = `${COMMON_HEADER}
 uniform sampler2D uIn;
 uniform ivec2 uSize;

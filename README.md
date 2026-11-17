@@ -4,7 +4,7 @@
 
 **把 ISP 实验室装进浏览器。**
 
-DNG / 裸 RAW → 黑白电平 → 平场 → 白平衡 → 数字增益 → 去马赛克 → 降噪 → CCM → Gamma → CSC → USM → PNG  
+DNG / 裸 RAW → 黑白电平 → 平场 → 白平衡 → 数字增益 → 去马赛克 → 降噪 → CCM → Gamma → 色调曲线 → CSC → USM → PNG<br/>
 解码、处理、分析、导出全部在本地完成，无后端、无上传、无账号。
 
 [![CI](https://github.com/xiaoqinxing/raw-image-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaoqinxing/raw-image-tools/actions/workflows/ci.yml)
@@ -30,7 +30,7 @@ DNG / 裸 RAW → 黑白电平 → 平场 → 白平衡 → 数字增益 → 去
 RAW Lab 反过来，把 **从 CFA 到 sRGB 的整条 ISP 管线摊开给你看**：
 
 - **从 RAW 开始，而不是从成片开始**：LibRaw WASM 解包 DNG，裸 RAW 支持 CFA、位宽、packing、端序、stride、active area 与逐通道黑白电平。
-- **每一步都可见、可调、可绕过**：10 个固定阶段，均可 bypass、A/B、查看中间结果、单独导出。
+- **每一步都可见、可调、可绕过**：11 个固定处理阶段，均可 bypass、A/B、查看中间结果、单独导出。
 - **像素不离开浏览器**：无上传、无账号、无服务端推理。关掉网络也能继续处理已加载的图像。
 - **工程级可复现**：参数、快照、预设、ROI、ColorChecker 与视图状态都能保存，方便反复验证。
 - **性能不靠“云端显卡”**：WebGL2 管线、Worker 解码/分析、阶段缓存与降采样策略，让 24MP RAW 在普通桌面浏览器里保持可交互。
@@ -40,7 +40,7 @@ RAW Lab 反过来，把 **从 CFA 到 sRGB 的整条 ISP 管线摊开给你看**
 ## 三步开始
 
 1. **导入**：拖入 DNG，或按实际存储格式配置裸 RAW。
-2. **拆解**：切换 10 个 ISP 阶段，做 A/B、差异图、闪烁对比或 2–4 图同步对比。
+2. **拆解**：切换 11 个 ISP 处理阶段，做 A/B、差异图、闪烁对比或 2–4 图同步对比。
 3. **分析 / 导出**：看直方图、SNR、MTF、噪声频谱、ColorChecker ΔE00，导出任意阶段的 PNG。
 
 不用安装，直接打开 **[在线演示](https://raw-image.li.qinxing.xyz)**。
@@ -55,7 +55,7 @@ RAW Lab 反过来，把 **从 CFA 到 sRGB 的整条 ISP 管线摊开给你看**
 - **CFA 伪彩预览**：默认开启，切到 RAW / 平场 / 白平衡阶段即可确认 Bayer 相位与数据排布。
 - **未执行项透明提示**：OpcodeList、LinearizationTable、BlackLevelDelta 等 DNG 标签不会静默忽略。
 
-### 固定 11 阶段 ISP 管线
+### 固定 12 阶段 ISP 管线
 
 顺序固定，保证不同图像、不同参数之间可比较、可复现。
 
@@ -69,14 +69,16 @@ RAW Lab 反过来，把 **从 CFA 到 sRGB 的整条 ISP 管线摊开给你看**
 | 6 | 降噪 | camera RGB | Guided（亮度/色度分离）或 Bilateral（可分离交叉双边近似），GPU 多 pass |
 | 7 | CCM | camera RGB → linear sRGB | DNG ForwardMatrix / ColorMatrix 相机 Profile、手动 3×3、ColorChecker 拟合 |
 | 8 | Gamma | linear sRGB → display sRGB | sRGB / Gamma 2.2 / Linear；bypass 时按线性值直接显示（工具栏标记 LINEAR） |
-| 9 | CSC | display sRGB → YUV → display sRGB | BT.709 / BT.601 / BT.2020 标准矩阵 + 饱和度 / 对比度 / 色调 / 亮度（Gamma 编码域） |
-| 10 | USM | display sRGB | 亮度通道高斯模糊 + 阈值 + 强度；依赖 Gamma 阶段 |
-| 11 | 输出 | — | 裁剪、8/16-bit PNG、任意阶段导出、全分辨率 |
+| 9 | 色调曲线 | display sRGB | RGB 复合 + R/G/B 单通道单调三次曲线；端点可调黑白；LUT ≤4096；依赖 Gamma 阶段 |
+| 10 | CSC | display sRGB → YUV → display sRGB | BT.709 / BT.601 / BT.2020 标准矩阵 + 饱和度 / 对比度 / 色调 / 亮度（Gamma 编码域） |
+| 11 | USM | display sRGB | 亮度通道高斯模糊 + 阈值 + 强度；依赖 Gamma 阶段 |
+| 12 | 输出 | — | 裁剪、8/16-bit PNG、任意阶段导出、全分辨率 |
 
 配套能力：
 
 - 中间阶段查看、导出与 **A/B**；快照 A/B、差异图、闪烁对比、可拖动分割线。
-- 上游阶段 bypass 时，下游阶段显示 `SKIP` 并提示不会执行（例如 Gamma bypass 后 USM 不运行）。
+- 色调曲线支持 RGB 复合 + R/G/B 单通道、拖动端点调整黑白、双击删点；默认 BYP，编辑后自动启用；>1 高光保持原值。
+- 上游阶段 bypass 时，下游阶段显示 `SKIP` 并提示不会执行（例如 Gamma bypass 后色调曲线与 USM 不运行）。
 - 高光 ≥1.0 标红、负值 ≤0 标蓝的剪切提示。
 - 阶段缓存：只重算参数变化影响的下游阶段；全分辨率只保留目标阶段。
 - 预览按偶数因子降采样，保持 2×2 CFA 相位；24MP 预览约 1500×1000。
@@ -179,9 +181,9 @@ npm run dev          # http://127.0.0.1:5173
 
 ```bash
 npm run typecheck
-npm test             # Vitest：133 个单元/数值测试
+npm test             # Vitest：154 个单元/数值测试
 npx playwright install chromium
-npm run test:e2e     # Playwright：23 个 E2E
+npm run test:e2e     # Playwright：24 个 E2E
 npm run build
 ```
 
@@ -212,6 +214,7 @@ npm run build
 ## 已知限制
 
 - AHD 是净室方向性近似实现，不是 GPL 参考实现逐行移植；RCD 尚未实现。
+- 色调曲线是显示域 1D 单调曲线，不含 Lightroom 的参数曲线分区、HSL/颜色分级或局部蒙版；LUT 默认 4096 点并受 `MAX_TEXTURE_SIZE` 限制。
 - DNG 的 OpcodeList、LinearizationTable、BlackLevelDeltaH/V 不执行，只提示。
 - 16-bit PNG 不写 ICC profile；颜色按当前 display-sRGB 值量化。
 - >48MP 不做原生全分辨率渲染；原生 100MP 分块渲染尚未实现。
