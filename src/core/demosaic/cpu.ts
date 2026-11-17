@@ -21,8 +21,15 @@ function idx(x: number, y: number, w: number, h: number): number {
 export function demosaicBilinear(src: CfaPlane): RgbPlane {
   const { width: w, height: h, data, cfa } = src;
   const out = new Float32Array(w * h * 3);
+  const mono = cfa.pattern === 'Y';
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
+      if (mono) {
+        const center = data[y * w + x];
+        const o = (y * w + x) * 3;
+        out[o] = center; out[o + 1] = center; out[o + 2] = center;
+        continue;
+      }
       const c = cfaAt(cfa, x, y);
       const center = data[y * w + x];
       const gAvg = (
@@ -109,8 +116,15 @@ const C_SAME_COL = transposeKernel(C_SAME_ROW);
 export function demosaicMHC(src: CfaPlane): RgbPlane {
   const { width: w, height: h, data, cfa } = src;
   const out = new Float32Array(w * h * 3);
+  const mono = cfa.pattern === 'Y';
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
+      if (mono) {
+        const center = data[y * w + x];
+        const o = (y * w + x) * 3;
+        out[o] = center; out[o + 1] = center; out[o + 2] = center;
+        continue;
+      }
       const c = cfaAt(cfa, x, y);
       const center = data[y * w + x];
       let r = center, g = center, b = center;

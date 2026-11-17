@@ -24,6 +24,7 @@ export function computeSnr(input: SnrInput): Omit<SnrResult, keyof import('../ty
   const y0 = Math.max(0, Math.floor(rect.y));
   const x1 = Math.min(width, Math.ceil(rect.x + rect.w));
   const y1 = Math.min(height, Math.ceil(rect.y + rect.h));
+  const mono = domain === 'raw-cfa' && !!cfa && cfa.pattern === 'Y';
   const sums = [0, 0, 0, 0];
   const sums2 = [0, 0, 0, 0];
   const counts = [0, 0, 0, 0];
@@ -31,7 +32,7 @@ export function computeSnr(input: SnrInput): Omit<SnrResult, keyof import('../ty
     for (let x = x0; x < x1; x++) {
       const i = (y * width + x) * 4;
       if (domain === 'raw-cfa' && cfa) {
-        const ch = cfaChannelAt(cfa, x, y);
+        const ch = mono ? 3 : cfaChannelAt(cfa, x, y);
         const v = toLinear(data[i], domain);
         sums[ch] += v;
         sums2[ch] += v * v;
@@ -49,8 +50,9 @@ export function computeSnr(input: SnrInput): Omit<SnrResult, keyof import('../ty
       }
     }
   }
-  const labels = ['R', 'G', 'B', 'Y'];
-  const perChannel = labels.map((label, ch) => {
+  const labels = mono ? ['Y'] : ['R', 'G', 'B', 'Y'];
+  const perChannel = labels.map((label, i) => {
+    const ch = mono ? 3 : i;
     const n = counts[ch];
     const mean = n ? sums[ch] / n : 0;
     const variance = n > 1 ? Math.max(0, (sums2[ch] - sums[ch] * sums[ch] / n) / (n - 1)) : 0;

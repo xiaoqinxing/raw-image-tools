@@ -2,8 +2,13 @@ import type { ChannelId, CfaLayout, CfaPattern, Point, RawGeometry } from '../ty
 
 export const CHANNEL_IDS: ChannelId[] = ['R', 'G1', 'G2', 'B'];
 
+/**
+ * Canonical Vec4 slot for a CFA channel. A Y (monochrome) sensor has no
+ * colour channels, so it shares slot 0; levels/WB/flat arrays stay Vec4 and
+ * all its sites resolve to the same slot.
+ */
 export function channelIndex(id: ChannelId): number {
-  return CHANNEL_IDS.indexOf(id);
+  return id === 'Y' ? 0 : CHANNEL_IDS.indexOf(id);
 }
 
 const PATTERN_SITES: Record<CfaPattern, [ChannelId, ChannelId, ChannelId, ChannelId]> = {
@@ -11,6 +16,7 @@ const PATTERN_SITES: Record<CfaPattern, [ChannelId, ChannelId, ChannelId, Channe
   BGGR: ['B', 'G2', 'G1', 'R'],
   GRBG: ['G1', 'R', 'B', 'G2'],
   GBRG: ['G2', 'B', 'R', 'G1'],
+  Y: ['Y', 'Y', 'Y', 'Y'],
 };
 
 const SITE_CHANNELS: Record<CfaPattern, [number, number, number, number]> = {
@@ -18,6 +24,7 @@ const SITE_CHANNELS: Record<CfaPattern, [number, number, number, number]> = {
   BGGR: [3, 2, 1, 0],
   GRBG: [1, 0, 3, 2],
   GBRG: [2, 3, 0, 1],
+  Y: [0, 0, 0, 0],
 };
 
 /**
@@ -57,9 +64,14 @@ export function cfaChannelAt(cfa: CfaLayout, x: number, y: number): number {
   return cfa.siteChannels[(y & 1) * 2 + (x & 1)];
 }
 
-/** Effective pattern string, both greens rendered as "G". */
+/** Effective pattern string, both greens rendered as "G"; mono is "Y". */
 export function effectivePattern(cfa: CfaLayout): string {
+  if (cfa.pattern === 'Y') return 'Y';
   return cfa.sites.map((c) => (c === 'G1' || c === 'G2' ? 'G' : c)).join('');
+}
+
+export function isMonoCfa(cfa: CfaLayout): boolean {
+  return cfa.pattern === 'Y';
 }
 
 export function patternFromCdesc(cdesc: string): CfaPattern | null {
@@ -67,6 +79,7 @@ export function patternFromCdesc(cdesc: string): CfaPattern | null {
   // We accept the four channel characters and derive the top-left orientation
   // only when the layout is unambiguous.
   const s = cdesc.toUpperCase();
+  if (s.startsWith('Y')) return 'Y';
   if (s.length < 4) return null;
   const c = s.slice(0, 4);
   if (c === 'RGGB') return 'RGGB';
@@ -83,6 +96,8 @@ export function patternFromCdesc(cdesc: string): CfaPattern | null {
 
 export function patternFromFilters(filters: number): CfaPattern | null {
   const f = filters >>> 0;
+  // LibRaw uses 0 when the source has no colour filter array.
+  if (f === 0) return 'Y';
   if (f === 0x94949494) return 'RGGB';
   if (f === 0x61616161) return 'BGGR';
   if (f === 0x49494949) return 'GRBG';

@@ -13,6 +13,7 @@ import { useActiveDoc, useStore } from './state/store';
 import { autosaveProject, fitView, loadPresets, renderActive, setStageBypassAndRender } from './services/editor';
 import { BUILD_INFO } from './build-info';
 import { ProbeReadout } from './ui/ProbeReadout';
+import { effectivePattern } from './core/raw/cfa';
 
 function StatusBar() {
   const doc = useActiveDoc();
@@ -34,7 +35,7 @@ function StatusBar() {
       {doc ? (
         <>
           <span className="mono">{doc.meta.geometry.active.w}×{doc.meta.geometry.active.h}</span>
-          <span className="mono">{doc.meta.cfa.sites.map((x) => x.startsWith('G') ? 'G' : x).join('')}</span>
+          <span className="mono">{effectivePattern(doc.meta.cfa)}</span>
           <span className="mono">{doc.meta.geometry.bitDepth}-bit</span>
           <span className="badge">{doc.kind}</span>
           <span className="mono">{doc.source === 'full' ? 'FULL' : 'PREVIEW'}</span>

@@ -24,6 +24,7 @@ export function computeHistogram(input: HistogramInput): Omit<HistogramResult, k
   let total = 0;
   let sumR = 0, sumG = 0, sumB = 0;
   let countR = 0, countG = 0, countB = 0;
+  const mono = domain === 'raw-cfa' && !!cfa && cfa.pattern === 'Y';
   const scale = bins - 1;
   const toDisplay = (v: number) => {
     if (domain === 'display-srgb') return v;
@@ -34,16 +35,24 @@ export function computeHistogram(input: HistogramInput): Omit<HistogramResult, k
     for (let px = 0; px < width; px++) {
       const i = (py * width + px) * 4;
       if (domain === 'raw-cfa' && cfa) {
-        const ch = cfaChannelAt(cfa, px, py);
         const v = data[i];
         const dv = toDisplay(v);
         const bin = Math.max(0, Math.min(bins - 1, Math.round(dv * scale)));
-        if (ch === 0) { r[bin]++; sumR += dv; countR++; }
-        else if (ch === 3) { b[bin]++; sumB += dv; countB++; }
-        else { g[bin]++; sumG += dv; countG++; }
-        y[bin]++;
-        if (dv < 0) low[ch]++;
-        if (dv > 1) high[ch]++;
+        if (mono) {
+          y[bin]++;
+          sumR += dv;
+          countR++;
+          if (dv < 0) low[0]++;
+          if (dv > 1) high[0]++;
+        } else {
+          const ch = cfaChannelAt(cfa, px, py);
+          if (ch === 0) { r[bin]++; sumR += dv; countR++; }
+          else if (ch === 3) { b[bin]++; sumB += dv; countB++; }
+          else { g[bin]++; sumG += dv; countG++; }
+          y[bin]++;
+          if (dv < 0) low[ch]++;
+          if (dv > 1) high[ch]++;
+        }
         min = Math.min(min, v);
         max = Math.max(max, v);
         sum += v;
@@ -85,8 +94,9 @@ export function computeHistogram(input: HistogramInput): Omit<HistogramResult, k
     min: Number.isFinite(min) ? min : 0,
     max: Number.isFinite(max) ? max : 0,
     mean: total ? sum / total : 0,
-    channelMeans: [meanR, meanG, meanB],
-    channelRatios: [meanR / gRatio, 1, meanB / gRatio],
+    channelMeans: mono ? [meanR, meanR, meanR] : [meanR, meanG, meanB],
+    channelRatios: mono ? [1, 1, 1] : [meanR / gRatio, 1, meanB / gRatio],
+    mono: mono || undefined,
     scale: 'linear',
   };
 }

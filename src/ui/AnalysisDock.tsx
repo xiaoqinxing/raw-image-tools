@@ -130,22 +130,34 @@ function HistogramView({ result }: { result: HistogramResult }) {
           <span>clip low {result.clipped.low.reduce((a, b) => a + b, 0)} / high {result.clipped.high.reduce((a, b) => a + b, 0)}</span>
           <span className="mono">Y 均值 {result.mean.toFixed(4)}</span>
           <span className="flex items-center gap-1.5">
-            <span className="text-[#ff7b7b]">R</span>
-            <span className="text-[#5fd99a]">G</span>
-            <span className="text-[#5cb0ff]">B</span>
-            <span className="text-ink-200">Y</span>
+            {result.mono ? (
+              <span className="text-ink-200">Y（单色）</span>
+            ) : (
+              <>
+                <span className="text-[#ff7b7b]">R</span>
+                <span className="text-[#5fd99a]">G</span>
+                <span className="text-[#5cb0ff]">B</span>
+                <span className="text-ink-200">Y</span>
+              </>
+            )}
           </span>
         </div>
         <Segmented value={log ? 'log' : 'linear'} onChange={(v) => setLog(v === 'log')} options={[{ value: 'linear', label: '线性' }, { value: 'log', label: '对数' }]} />
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-ink-400" data-testid="histogram-stats">
-        <span>R 均值 <span className="mono text-[#ff7b7b]">{meanR.toFixed(4)}</span></span>
-        <span>G 均值 <span className="mono text-[#5fd99a]">{meanG.toFixed(4)}</span></span>
-        <span>B 均值 <span className="mono text-[#5cb0ff]">{meanB.toFixed(4)}</span></span>
-        <span>比例 R/G <span className="mono">{ratioR.toFixed(3)}</span> · B/G <span className="mono">{ratioB.toFixed(3)}</span>（G=1）</span>
+        {result.mono ? (
+          <span>Y 均值 <span className="mono text-ink-200">{result.channelMeans[0].toFixed(4)}</span>（单色输入）</span>
+        ) : (
+          <>
+            <span>R 均值 <span className="mono text-[#ff7b7b]">{meanR.toFixed(4)}</span></span>
+            <span>G 均值 <span className="mono text-[#5fd99a]">{meanG.toFixed(4)}</span></span>
+            <span>B 均值 <span className="mono text-[#5cb0ff]">{meanB.toFixed(4)}</span></span>
+            <span>比例 R/G <span className="mono">{ratioR.toFixed(3)}</span> · B/G <span className="mono">{ratioB.toFixed(3)}</span>（G=1）</span>
+          </>
+        )}
       </div>
       <canvas ref={ref} className="hist-canvas min-h-[90px] w-full flex-1 rounded border border-ink-700" />
-      <div className="text-[10px] text-ink-500">横轴固定 0–1 亮度值；纵轴为像素数量（自适应）。R/G/B 均值为当前 ROI 内统计。</div>
+      <div className="text-[10px] text-ink-500">横轴固定 0–1 亮度值；纵轴为像素数量（自适应）。{result.mono ? 'Y 均值为当前 ROI 内统计。' : 'R/G/B 均值为当前 ROI 内统计。'}</div>
     </div>
   );
 }
@@ -367,6 +379,7 @@ function ColorCheckerView({ result }: { result: ColorCheckerResult | null }) {
     }
   }, [fitCreatedAt]);
   if (!doc) return null;
+  const mono = doc.meta.cfa.pattern === 'Y';
   const fit = result ?? doc.colorChecker.fit ?? null;
   const referencePatches = getReference(doc.colorChecker.referenceId);
   const settings = normalizeColorCheckerSettings(doc.colorCheckerSettings);
@@ -412,12 +425,17 @@ function ColorCheckerView({ result }: { result: ColorCheckerResult | null }) {
           <option value="classic24-pre2014-d65">Classic 24 · pre-2014 · D65</option>
         </select>
         <div className="flex flex-wrap gap-1">
-          <Button className="btn-xs" variant={tool === 'colorchecker' ? 'primary' : 'ghost'} onClick={() => setTool(tool === 'colorchecker' ? 'pan' : 'colorchecker')}>
+          <Button className="btn-xs" variant={tool === 'colorchecker' ? 'primary' : 'ghost'} disabled={mono} onClick={() => setTool(tool === 'colorchecker' ? 'pan' : 'colorchecker')}>
             四角框选
           </Button>
           <Button className="btn-xs" onClick={() => setColorChecker(doc.id, { ...doc.colorChecker, corners: null, fit: undefined })}>重置</Button>
-          <Button className="btn-xs" variant="primary" onClick={fitColorChecker} disabled={!doc.colorChecker.corners}>拟合 CCM</Button>
+          <Button className="btn-xs" variant="primary" onClick={fitColorChecker} disabled={!doc.colorChecker.corners || mono}>拟合 CCM</Button>
         </div>
+        {mono ? (
+          <div className="rounded border border-[#5c4a24] bg-[#332713] p-2 text-[11px] leading-4 text-[#ffca7a]">
+            Y 通道（单色）输入没有色彩信息，ColorChecker 拟合与色卡白平衡不可用。
+          </div>
+        ) : null}
         <div className="kv"><span>四角</span><span className="mono">{doc.colorChecker.corners?.length ?? 0}/4</span></div>
 
         <div className="rounded border border-ink-700 p-2">
@@ -437,7 +455,7 @@ function ColorCheckerView({ result }: { result: ColorCheckerResult | null }) {
             <Toggle on={settings.autoWb} onChange={(v) => updateSettings({ autoWb: v })} label="拟合前按中性块校正 WB" />
           </div>
           <div className="mt-1 flex flex-wrap gap-1">
-            <Button className="btn-xs" onClick={applyChartWb} disabled={!doc.colorChecker.corners}>按色卡中性块设 WB</Button>
+            <Button className="btn-xs" onClick={applyChartWb} disabled={!doc.colorChecker.corners || mono}>按色卡中性块设 WB</Button>
           </div>
           <div className="mt-1 text-[10px] leading-4 text-ink-500">使用底行中间四块（20–23：Neutral 8 / 6.5 / 5 / 3.5）。</div>
         </div>

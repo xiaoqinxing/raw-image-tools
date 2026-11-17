@@ -17,6 +17,15 @@ describe('DNG import', () => {
     expect(meta.active).toEqual({ x: 0, y: 0, w: 32, h: 24 });
   });
 
+  it('detects a uniform DNG CFA as Y-channel input', () => {
+    const dng = makeTestDng({ width: 32, height: 24, cfa: 'Y', black: 64, white: 4095 });
+    const ab = dng.buffer.slice(dng.byteOffset, dng.byteOffset + dng.byteLength);
+    const meta = parseDngMetadata(ab);
+    expect(meta.cfaPattern).toBe('Y');
+    expect(meta.black?.[1]).toBe(64);
+    expect(meta.white?.[3]).toBe(4095);
+  });
+
   it('decodes pixels and metadata through LibRaw', async () => {
     const dng = makeTestDng({ width: 32, height: 24, black: 128, white: 4095 });
     const ab = dng.buffer.slice(dng.byteOffset, dng.byteOffset + dng.byteLength);
@@ -28,5 +37,15 @@ describe('DNG import', () => {
     expect(raw.levels.white[0]).toBe(4095);
     expect(raw.cfa.sites).toEqual(['R', 'G1', 'G2', 'B']);
     expect(raw.data[0]).toBeGreaterThan(0);
+  });
+
+  it('decodes a mono DNG as a Y-channel layout without WB', async () => {
+    const dng = makeTestDng({ width: 32, height: 24, cfa: 'Y', black: 64, white: 4095 });
+    const ab = dng.buffer.slice(dng.byteOffset, dng.byteOffset + dng.byteLength);
+    const raw = await decodeDng(ab, { fileName: 'mono.dng', fileSize: dng.length, sha256: 'test' });
+    expect(raw.cfa.pattern).toBe('Y');
+    expect(raw.cfa.sites).toEqual(['Y', 'Y', 'Y', 'Y']);
+    expect(raw.cfa.siteChannels).toEqual([0, 0, 0, 0]);
+    expect(raw.wb.asShot).toBeNull();
   });
 });

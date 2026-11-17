@@ -153,6 +153,27 @@ self.onmessage = async (event: MessageEvent<RenderWorkerRequest>) => {
       const cx = msg.point.x * sx;
       const cy = msg.point.y * sy;
       const rad = Math.max(2, Math.round((msg.radius ?? 8) * Math.min(sx, sy)));
+      const mono = raw.cfa.pattern === 'Y';
+      if (mono) {
+        let sum = 0;
+        let n = 0;
+        for (let y = Math.max(0, Math.floor(cy - rad)); y < Math.min(pixels.height, Math.ceil(cy + rad)); y++) {
+          for (let x = Math.max(0, Math.floor(cx - rad)); x < Math.min(pixels.width, Math.ceil(cx + rad)); x++) {
+            sum += pixels.data[(y * pixels.width + x) * 4];
+            n++;
+          }
+        }
+        const mean = n ? sum / n : 0;
+        if (!(mean > 0)) throw new Error('灰点区域没有有效信号');
+        post({
+          type: 'grayPicked',
+          requestId: msg.requestId,
+          multipliers: [1, 1, 1, 1],
+          means: [mean, mean, mean, mean],
+          stage: r.result.stage,
+        });
+        return;
+      }
       const sums = [0, 1e-12, 1e-12, 0];
       const counts = [0, 0, 0, 0];
       for (let y = Math.max(0, Math.floor(cy - rad)); y < Math.min(pixels.height, Math.ceil(cy + rad)); y++) {
@@ -176,6 +197,7 @@ self.onmessage = async (event: MessageEvent<RenderWorkerRequest>) => {
     }
     if (msg.type === 'chartWb') {
       if (!raw) throw new Error('没有 RAW');
+      if (raw.cfa.pattern === 'Y') throw new Error('Y 通道（单色）输入没有色彩信息，无法计算色卡白平衡');
       if (msg.corners.length !== 4) throw new Error('WB 计算需要四个角点');
       if (msg.params.demosaic.bypass) throw new Error('WB 计算需要启用去马赛克');
       const paramsWbOff = structuredClone(msg.params);
@@ -334,6 +356,7 @@ self.onmessage = async (event: MessageEvent<RenderWorkerRequest>) => {
         diff.b = { imageId: raw!.id, stage: bR.result.stage };
         result = { ...diff, ...metaFor([], msg.roi ?? null) } as AnalysisResult;
       } else if (msg.kind === 'colorchecker') {
+        if (raw.cfa.pattern === 'Y') throw new Error('Y 通道（单色）输入没有色彩信息，无法进行 ColorChecker 拟合');
         const cornersNorm = msg.options?.corners as Array<{ x: number; y: number }> | undefined;
         if (!cornersNorm || cornersNorm.length !== 4) throw new Error('ColorChecker 需要四个角点');
         const corners = cornersNorm.map((p) => ({ x: p.x * pixels.width, y: p.y * pixels.height })) as [{ x: number; y: number }, { x: number; y: number }, { x: number; y: number }, { x: number; y: number }];

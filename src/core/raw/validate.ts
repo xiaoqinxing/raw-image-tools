@@ -38,8 +38,9 @@ export function analyzeRaw(
   }
   const belowBlack = belowByCh.reduce((a, b) => a + b, 0);
   const aboveWhite = aboveByCh.reduce((a, b) => a + b, 0);
+  const mono = cfa.pattern === 'Y';
 
-  const perChannel = CHANNEL_IDS.map((channel, ch) => {
+  const perChannel = (mono ? [{ channel: 'Y' as ChannelId, ch: 0 }] : CHANNEL_IDS.map((channel, ch) => ({ channel, ch }))).map(({ channel, ch }) => {
     const hist = hists[ch];
     const total = hist.reduce((a, b) => a + b, 0);
     const at = (q: number) => {
@@ -76,11 +77,14 @@ export function analyzeRaw(
   };
   const mG1 = mean(1);
   const mG2 = mean(2);
-  const greenDiff = mG1 + mG2 > 0 ? Math.abs(mG1 - mG2) / (mG1 + mG2) : 0;
-  const cfaConsistency = Math.max(0, 1 - greenDiff * 2);
+  const greenDiff = mono ? 0 : (mG1 + mG2 > 0 ? Math.abs(mG1 - mG2) / (mG1 + mG2) : 0);
+  const cfaConsistency = mono ? 1 : Math.max(0, 1 - greenDiff * 2);
 
   const warnings: RawDiagnostics['warnings'] = [];
   const suggestions: RawDiagnostics['suggestions'] = [];
+  if (mono) {
+    warnings.push({ level: 'info', message: 'Y 通道（单色）输入：没有彩色 CFA 信息，去马赛克将直接复制亮度。' });
+  }
   if (actualBytes < layout.headerOffset + layout.rowStride * (geometry.storedHeight - 1) + layout.rowBytes) {
     warnings.push({ level: 'error', message: '文件长度不足以容纳按当前 stride 解码的完整帧。' });
   }

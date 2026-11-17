@@ -37,7 +37,8 @@ export function wbRatios(multipliers: Vec4): [number, number, number] {
 }
 
 /** Collapse Bayer sites to the RGB channel users see on the camera. */
-export function cfaChannelLabel(channel: ChannelId): 'R' | 'G' | 'B' {
+export function cfaChannelLabel(channel: ChannelId): 'R' | 'G' | 'B' | 'Y' {
+  if (channel === 'Y') return 'Y';
   if (channel === 'R') return 'R';
   if (channel === 'B') return 'B';
   return 'G';

@@ -691,6 +691,7 @@ export class Renderer {
       gl.uniform2i(this.u(p, 'uSize'), width, height);
       gl.uniform4iv(this.u(p, 'uSites'), raw.cfa.siteChannels);
       gl.uniform1i(this.u(p, 'uAlgorithm'), params.demosaic.algorithm === 'bilinear' ? 0 : 1);
+      gl.uniform1i(this.u(p, 'uMono'), raw.cfa.pattern === 'Y' ? 1 : 0);
       this.draw();
       return out;
     }
@@ -966,6 +967,7 @@ export class Renderer {
     gl.uniform1i(this.u(p, 'uLinearDisplay'), view.linearDisplay ? 1 : 0);
     gl.uniform1i(this.u(p, 'uInterp'), result.domain === 'raw-cfa' ? 0 : 1);
     gl.uniform4iv(this.u(p, 'uCfaSites'), this.raw?.cfa.siteChannels ?? [0, 1, 2, 3]);
+    gl.uniform1i(this.u(p, 'uMono'), this.raw?.cfa.pattern === 'Y' ? 1 : 0);
     gl.uniform1f(this.u(p, 'uSplit'), view.split);
     gl.uniform1f(this.u(p, 'uFlicker'), view.flicker);
     gl.uniform1f(this.u(p, 'uDiffGain'), view.diffGain);

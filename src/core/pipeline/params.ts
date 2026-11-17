@@ -12,6 +12,7 @@ import { deriveCscFromDng, IDENTITY3, matrixNearIdentity, mul3, sanitizeMat3 } f
 import { createIdentityToneCurvePoints, sanitizeToneCurvePointsSet } from '../color/tone-curve';
 import { cscTransform, type CscTransform } from '../color/yuv';
 import { defaultLevelsForBitDepth } from '../raw/levels';
+import { isMonoCfa } from '../raw/cfa';
 
 export const STAGE_ORDER: StageId[] = [
   'levels',
@@ -111,11 +112,16 @@ export function isLinearDomain(domain: Domain): boolean {
 }
 
 export function createDefaultParams(raw?: RawImage): PipelineParams {
-  const profile = raw
+  const mono = raw ? isMonoCfa(raw.cfa) : false;
+  const profile = raw && !mono
     ? deriveCscFromDng(raw.color)
-    : { matrix: IDENTITY3, source: 'identity' as const, warnings: ['没有 RAW 色彩元数据。'] };
+    : {
+        matrix: IDENTITY3,
+        source: 'identity' as const,
+        warnings: [mono ? 'Y 通道（单色）输入没有相机色彩矩阵。' : '没有 RAW 色彩元数据。'],
+      };
   const hasProfile = !matrixNearIdentity(profile.matrix);
-  const wb = raw?.wb.asShot ?? [1, 1, 1, 1];
+  const wb = mono ? ([1, 1, 1, 1] as Vec4) : raw?.wb.asShot ?? [1, 1, 1, 1];
   const levels = raw
     ? defaultLevelsForBitDepth(raw.geometry.bitDepth)
     : { black: [0, 0, 0, 0] as Vec4, white: [65535, 65535, 65535, 65535] as Vec4 };
@@ -136,8 +142,8 @@ export function createDefaultParams(raw?: RawImage): PipelineParams {
       maxGain: 8,
     },
     wb: {
-      bypass: false,
-      mode: raw?.wb.source === 'dng' || raw?.wb.source === 'libraw' ? 'as-shot' : 'custom',
+      bypass: mono,
+      mode: mono ? 'custom' : raw?.wb.source === 'dng' || raw?.wb.source === 'libraw' ? 'as-shot' : 'custom',
       multipliers: [...wb] as Vec4,
       pick: null,
     },
@@ -158,7 +164,7 @@ export function createDefaultParams(raw?: RawImage): PipelineParams {
       detail: 50,
     },
     ccm: {
-      bypass: false,
+      bypass: mono,
       source: hasProfile ? 'dng' : 'identity',
       matrix: hasProfile ? ([...profile.matrix] as Mat3) : ([...IDENTITY3] as Mat3),
     },

@@ -29,7 +29,7 @@ DNG / 裸 RAW → 黑白电平 → 平场 → 白平衡 → 数字增益 → 去
 
 RAW Lab 反过来，把 **从 CFA 到 sRGB 的整条 ISP 管线摊开给你看**：
 
-- **从 RAW 开始，而不是从成片开始**：LibRaw WASM 解包 DNG，裸 RAW 支持 CFA、位宽、packing、端序、stride、active area 与逐通道黑白电平。
+- **从 RAW 开始，而不是从成片开始**：LibRaw WASM 解包 DNG，裸 RAW 支持 CFA / Y 单色、位宽、packing、端序、stride、active area 与逐通道黑白电平。
 - **每一步都可见、可调、可绕过**：11 个固定处理阶段，均可 bypass、A/B、查看中间结果、单独导出。
 - **像素不离开浏览器**：无上传、无账号、无服务端推理。关掉网络也能继续处理已加载的图像。
 - **工程级可复现**：参数、快照、预设、ROI、ColorChecker 与视图状态都能保存，方便反复验证。
@@ -50,9 +50,9 @@ RAW Lab 反过来，把 **从 CFA 到 sRGB 的整条 ISP 管线摊开给你看**
 ### RAW 导入与诊断
 
 - **DNG**：LibRaw WASM 解包像素，配合本地 TIFF/DNG 标签解析补齐 `ActiveArea`、`DefaultCrop`、`BlackLevel`、`WhiteLevel`、`ColorMatrix1/2`、`ForwardMatrix1/2`、`AsShotNeutral`、`CalibrationIlluminant`、`Orientation`、`BaselineExposure` 等元数据。
-- **裸 RAW 二进制**：支持 RGGB / BGGR / GRBG / GBRG；8/10/12/14/16-bit；u8/u16、LE/BE、左/右对齐、sample shift；连续 packed 与 MIPI RAW10/12/14；header offset、row stride、active area、逐 CFA 黑白电平。默认黑白电平按位宽填充（10-bit 64/1023，12-bit 256/4095）。
+- **裸 RAW 二进制**：支持 RGGB / BGGR / GRBG / GBRG / Y（单色）；8/10/12/14/16-bit；u8/u16、LE/BE、左/右对齐、sample shift；连续 packed 与 MIPI RAW10/12/14；header offset、row stride、active area、逐 CFA 黑白电平。默认黑白电平按位宽填充（10-bit 64/1023，12-bit 256/4095）。
 - **导入即体检**：逐通道 min/p1/p50/p99/max、黑/白电平越界比例、G1/G2 一致性、字节差、警告与修正建议。
-- **CFA 伪彩预览**：默认开启，切到 RAW / 平场 / 白平衡阶段即可确认 Bayer 相位与数据排布。
+- **CFA 伪彩预览**：默认开启，切到 RAW / 平场 / 白平衡阶段即可确认 Bayer 相位与数据排布；Y 单色输入使用中性伪彩。
 - **未执行项透明提示**：OpcodeList、LinearizationTable、BlackLevelDelta 等 DNG 标签不会静默忽略。
 
 ### 固定 12 阶段 ISP 管线
@@ -214,6 +214,7 @@ npm run build
 ## 已知限制
 
 - AHD 是净室方向性近似实现，不是 GPL 参考实现逐行移植；RCD 尚未实现。
+- Y 通道（单色）输入没有色彩信息：去马赛克直接复制亮度，WB/CCM 默认 BYP，ColorChecker 拟合不可用。
 - 色调曲线是显示域 1D 单调曲线，不含 Lightroom 的参数曲线分区、HSL/颜色分级或局部蒙版；LUT 默认 4096 点并受 `MAX_TEXTURE_SIZE` 限制。
 - DNG 的 OpcodeList、LinearizationTable、BlackLevelDeltaH/V 不执行，只提示。
 - 16-bit PNG 不写 ICC profile；颜色按当前 display-sRGB 值量化。

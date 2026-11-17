@@ -9,6 +9,12 @@ function plane(w: number, h: number, fn: (x: number, y: number) => number): CfaP
   return { width: w, height: h, data, cfa: makeCfaLayout('RGGB') };
 }
 
+function monoPlane(w: number, h: number, fn: (x: number, y: number) => number): CfaPlane {
+  const data = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) data[y * w + x] = fn(x, y);
+  return { width: w, height: h, data, cfa: makeCfaLayout('Y') };
+}
+
 describe('demosaic CPU reference', () => {
   it('bilinear preserves a constant CFA image', () => {
     const src = plane(16, 16, () => 0.25);
@@ -64,5 +70,17 @@ describe('demosaic CPU reference', () => {
     expect(out.data[i]).toBeGreaterThan(0.1);
     expect(out.data[i + 1]).toBeCloseTo(0.4, 2);
     expect(out.data[i + 2]).toBeGreaterThan(0.2);
+  });
+
+  it('all demosaicers pass a Y plane through unchanged into RGB', () => {
+    const src = monoPlane(17, 13, (x, y) => 0.05 + (x * 7 + y * 11) / 1000);
+    for (const demosaic of [demosaicBilinear, demosaicMHC, demosaicAHD]) {
+      const out = demosaic(src);
+      for (let i = 0; i < src.data.length; i++) {
+        expect(out.data[i * 3]).toBeCloseTo(src.data[i], 6);
+        expect(out.data[i * 3 + 1]).toBeCloseTo(src.data[i], 6);
+        expect(out.data[i * 3 + 2]).toBeCloseTo(src.data[i], 6);
+      }
+    }
   });
 });

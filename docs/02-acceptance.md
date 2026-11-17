@@ -1,6 +1,6 @@
 # 实现与验收记录
 
-日期：2026-11-07（初始基线）；2026-11-17 增补色调曲线验收
+日期：2026-11-07（初始基线）；2026-11-17 增补色调曲线与 Y 单色输入验收
 版本：0.1.0（当前版本由构建自动生成）
 环境：Linux，Node 22.22.3，无头 Chromium（headless shell 1248），
 `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader`，
@@ -14,10 +14,11 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 
 | 套件 | 数量 | 结果 |
 |------|------|------|
-| Vitest 单元/数值 | 154 | 全部通过 |
+| Vitest 单元/数值 | 164 | 全部通过 |
 | Playwright E2E：DNG 导入 / 阶段 / 16-bit 导出 / 工程保存 | 1 | 通过 |
 | Playwright E2E：裸 RAW 导入 + 错误配置 | 1 | 通过 |
 | Playwright E2E：裸 RAW 黑白电平随位宽默认 | 1 | 通过 |
+| Playwright E2E：裸 RAW Y 单色导入 | 1 | 通过 |
 | Playwright E2E：ColorChecker 四角 + CCM 拟合 | 1 | 通过 |
 | Playwright E2E：ColorChecker 取样框 + 权重 + a*b* 图 | 1 | 通过 |
 | Playwright E2E：差异指标 | 1 | 通过 |
@@ -36,13 +37,14 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 | Playwright E2E：数字增益阶段 + CSC YUV 调整/色域标准 | 2 | 通过 |
 | Playwright E2E：ROI 默认全图 + 框选限制 | 1 | 通过 |
 | Playwright E2E：色调曲线编辑 / 单通道 / 重置 / Gamma 门控 | 1 | 通过 |
-| **E2E 合计** | **24** | **全部通过** |
+| **E2E 合计** | **25** | **全部通过** |
 
 覆盖的数值测试：
 
 - CIEDE2000 Sharma 40 组标准向量（误差 < 1e-3）。
 - 色彩矩阵求逆、Bradford D50→D65、sRGB 传递函数往返。
 - 裸 RAW：u16 LE/BE、左/右对齐、packed 10/12/14-bit LSB/MSB、MIPI RAW10/12/14、header/stride/active crop/CFA 相位、截断与非法电平。
+- Y 单色：CFA 布局归一为单通道、LibRaw cdesc/filters 与 DNG 统一 CFAPattern 识别、Bilinear/MHC/AHD 直接复制亮度、raw-cfa 直方图与 SNR 只输出 Y。
 - 黑白电平默认：按位宽生成 1/16 满量程黑电平与 $2^{bits}-1$ 白电平（10-bit 64/1023，12-bit 256/4095）。
 - 分析 ROI 裁剪：预览坐标映射、raw-cfa 偶数像素对齐、无 ROI 时全图透传。
 - ColorChecker：透视网格采样 + 非对称相机矩阵往返；拟合 mean ΔE00 < 0.1（转置回归）；曝光 ×0.6/×1.6、WB 偏 R1.3/B0.8 时仍 <0.1；逐块权重 0 不参与拟合；目标饱和度/色调与标准指标；底部四中性块 WB 不把不同灰度误判为光照不均。
@@ -108,7 +110,7 @@ AHD Quality：
 | 项 | 状态 | 备注 |
 |----|------|------|
 | DNG 导入 + DNG 专属标签 | 通过 | Opcode/Linearization 未执行，提示 |
-| 裸 RAW：8/10/12/14/16、packed/unpacked、LE/BE、stride/offset/active/CFA | 通过 | 单元测试覆盖；黑白电平默认随位宽 |
+| 裸 RAW：8/10/12/14/16、packed/unpacked、LE/BE、stride/offset/active/CFA/Y | 通过 | 单元测试覆盖；黑白电平默认随位宽；Y 为单色亮度输入 |
 | DNG 缺 BlackLevel/WhiteLevel | 通过 | 按位宽默认值填充并给出警告 |
 | 固定 12 阶段、逐阶段 bypass/调参/查看 | 通过 | 预览与全分辨率；色调曲线为独立显示域阶段 |
 | 阶段 A/B / 快照 A/B / 闪烁 / 可拖分割线 | 通过 | 手动验证 + 差异 E2E |
@@ -138,6 +140,7 @@ AHD Quality：
 2. AHD 是方向性近似，不是参考实现；RCD 未实现。
 3. DNG OpcodeList / LinearizationTable / BlackLevelDelta 不执行。
 4. 16-bit PNG 不写 ICC；显示链路固定 sRGB。
+5. Y 通道（单色）输入没有色彩信息：WB/CCM 默认 BYP，ColorChecker 拟合不可用；去马赛克直接复制亮度。
 5. File System Access API 持久化句柄未接入；工程重开依赖文件选择器。
 6. 冷启动与硬件 GPU 的 present 性能需要在目标桌面环境复测。
 7. `window.prompt` 命名预设/工程在部分浏览器策略下可能被拦截，后续改为 Radix Dialog。

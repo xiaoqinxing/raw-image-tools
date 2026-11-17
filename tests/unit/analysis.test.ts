@@ -7,6 +7,7 @@ import { computeDiff } from '../../src/core/analysis/diff';
 import { fitCcm } from '../../src/core/color/ccm';
 import { linearSrgbToLab, srgbDecode, srgbEncode } from '../../src/core/color/lab';
 import { COLOR_CHECKER_CLASSIC_24 } from '../../src/core/color/colorchecker-data';
+import { makeCfaLayout } from '../../src/core/raw/cfa';
 
 function rgba(w: number, h: number, fn: (x: number, y: number) => [number, number, number, number]): Float32Array {
   const out = new Float32Array(w * h * 4);
@@ -36,6 +37,33 @@ describe('analysis', () => {
     expect(h.channelRatios[0]).toBeCloseTo(2, 6);
     expect(h.channelRatios[1]).toBe(1);
     expect(h.channelRatios[2]).toBeCloseTo(0.4, 6);
+  });
+
+  it('counts a raw Y plane into the luminance histogram only', () => {
+    const data = rgba(4, 4, (x) => [0.25 + x * 0.1, 0, 0, 1]);
+    const cfa = makeCfaLayout('Y');
+    const h = computeHistogram({ width: 4, height: 4, data, bins: 256, domain: 'raw-cfa', cfa });
+    expect(h.mono).toBe(true);
+    expect(h.total).toBe(16);
+    expect(h.channels.y.reduce((a, b) => a + b, 0)).toBe(16);
+    expect(h.channels.r.reduce((a, b) => a + b, 0)).toBe(0);
+    expect(h.channelMeans[0]).toBeCloseTo(h.channelMeans[2], 6);
+    expect(h.channelRatios).toEqual([1, 1, 1]);
+  });
+
+  it('reports a single Y row for SNR on raw Y input', () => {
+    const data = rgba(16, 16, () => [0.5, 0, 0, 1]);
+    const r = computeSnr({
+      width: 16,
+      height: 16,
+      data,
+      rect: { x: 0, y: 0, w: 16, h: 16 },
+      domain: 'raw-cfa',
+      cfa: makeCfaLayout('Y'),
+    });
+    expect(r.perChannel.map((c) => c.channel)).toEqual(['Y']);
+    expect(r.perChannel[0].samples).toBe(256);
+    expect(r.perChannel[0].mean).toBeCloseTo(0.5, 6);
   });
 
   it('SNR matches synthetic Gaussian noise within 0.2 dB', () => {

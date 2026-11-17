@@ -24,6 +24,27 @@ test('bare RAW import level defaults follow the selected bit depth', async ({ pa
   await expect(page.getByLabel('white DN')).toHaveValue('16383');
 });
 
+test('imports a bare Y-channel RAW as monochrome', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '导入图像' }).first().click();
+  await page.getByRole('button', { name: '裸 RAW 二进制' }).click();
+  await page.setInputFiles('.modal input[type=file]', fixture);
+  await page.getByLabel('存储宽').fill('64');
+  await page.getByLabel('存储高').fill('48');
+  await page.getByLabel('CFA / 通道').selectOption('Y');
+  await page.getByLabel('white DN (Y)').fill('4095');
+  await page.locator('.modal').getByRole('button', { name: '导入', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__rawlab.useStore.getState().order.length), { timeout: 60_000 }).toBe(1);
+  const cfa = await page.evaluate(() => {
+    const s = window.__rawlab.useStore.getState();
+    return s.docs[s.activeId!].meta.cfa;
+  });
+  expect(cfa.pattern).toBe('Y');
+  expect(cfa.sites).toEqual(['Y', 'Y', 'Y', 'Y']);
+  await page.locator('.analysis-collapse').click();
+  await expect(page.getByText(/Y 均值/).first()).toBeVisible({ timeout: 30_000 });
+});
+
 test('imports a bare RAW and reports bad configuration', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: '导入图像' }).first().click();

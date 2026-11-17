@@ -155,7 +155,12 @@ function firstNum(v: TagValue | undefined): number | undefined {
 }
 
 function patternFromCfa(values: number[] | undefined, planeColors: number[] | undefined): CfaPattern | undefined {
-  if (!values || values.length < 4) return undefined;
+  // A single plane colour is by definition monochrome, even when the CFAPattern
+  // is a 1x1 cell.
+  if (planeColors && planeColors.length === 1) return 'Y';
+  if (!values || values.length === 0) return undefined;
+  if (values.every((v) => v === values[0])) return 'Y';
+  if (values.length < 4) return undefined;
   const names = values.slice(0, 4).map((v) => {
     const color = planeColors && planeColors.length > v ? planeColors[v] : v;
     return color === 0 ? 'R' : color === 1 ? 'G' : color === 2 ? 'B' : 'G';
@@ -171,6 +176,7 @@ function canonicalSiteChannels(pattern: CfaPattern): [number, number, number, nu
     case 'BGGR': return [3, 2, 1, 0];
     case 'GRBG': return [1, 0, 3, 2];
     case 'GBRG': return [2, 3, 0, 1];
+    case 'Y': return [0, 0, 0, 0];
   }
 }
 
@@ -251,11 +257,14 @@ export function parseDngMetadata(buffer: ArrayBuffer): DngTags {
 
   const warnings: string[] = [];
   const dngVersion = asNumbers(merged.get(50706));
+  const photometric = firstNum(merged.get(262));
+  const samplesPerPixel = firstNum(merged.get(277));
   const cfaPattern = patternFromCfa(
     asNumbers(merged.get(33422)),
     asNumbers(merged.get(50710)),
-  );
+  ) ?? (photometric === 34892 && (samplesPerPixel ?? 1) === 1 ? 'Y' : undefined);
   if (!cfaPattern) warnings.push('未能从 DNG 解析 CFA 排列，将回退到 LibRaw 的 CFA 信息。');
+  if (cfaPattern === 'Y') warnings.push('DNG 为 Y 通道（单色）输入：没有彩色 CFA，去马赛克直接复制亮度。');
 
   const active = asRectActive(merged.get(50829));
   const defaultCrop = asRectCrop(merged.get(50719), merged.get(50720));

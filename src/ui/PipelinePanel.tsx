@@ -9,6 +9,7 @@ import { ToneCurveEditor } from './ToneCurveEditor';
 import type { Mat3, Point, StageId, ToneCurveChannel, Vec4 } from '../core/types';
 import { IDENTITY3, matrixToString } from '../core/color/matrices';
 import { createIdentityToneCurvePoints } from '../core/color/tone-curve';
+import { effectivePattern } from '../core/raw/cfa';
 
 function StageRow({ stage, index }: { stage: StageId; index: number }) {
   const doc = useActiveDoc();
@@ -111,13 +112,23 @@ function StageControls({ stage }: { stage: StageId }) {
   const [curveChannel, setCurveChannel] = React.useState<ToneCurveChannel>('rgb');
   if (!doc) return null;
   const p = doc.params[stage] as any;
+  const mono = doc.meta.cfa.pattern === 'Y';
   const set = (patch: Record<string, unknown>) => updateStageAndRender(stage as keyof typeof doc.params, patch as never);
 
   if (stage === 'levels') {
     return (
       <div className="space-y-2">
-        <Vec4Editor label="黑电平（DN，R/G1/G2/B）" value={doc.params.levels.black} onChange={(v) => updateStageAndRender('levels', { black: v })} />
-        <Vec4Editor label="白电平（DN）" value={doc.params.levels.white} onChange={(v) => updateStageAndRender('levels', { white: v })} max={131071} />
+        {mono ? (
+          <div className="grid grid-cols-2 gap-2">
+            <NumberField label="黑电平（DN，Y）" value={doc.params.levels.black[0]} onChange={(v) => updateStageAndRender('levels', { black: [v, v, v, v] })} />
+            <NumberField label="白电平（DN，Y）" value={doc.params.levels.white[0]} onChange={(v) => updateStageAndRender('levels', { white: [v, v, v, v] })} />
+          </div>
+        ) : (
+          <>
+            <Vec4Editor label="黑电平（DN，R/G1/G2/B）" value={doc.params.levels.black} onChange={(v) => updateStageAndRender('levels', { black: v })} />
+            <Vec4Editor label="白电平（DN）" value={doc.params.levels.white} onChange={(v) => updateStageAndRender('levels', { white: v })} max={131071} />
+          </>
+        )}
         <Toggle on={doc.params.levels.clampNegative} onChange={(v) => updateStageAndRender('levels', { clampNegative: v })} label="扣除负值" />
         <div className="kv"><span>来源</span><span className="mono">{doc.params.levels.source}</span></div>
         <div className="text-[11px] leading-4 text-ink-500">Bypass 时按 0 / 位宽最大 DN 归一化（10-bit 1023、12-bit 4095），保证后续阶段仍可运行。</div>
@@ -141,8 +152,8 @@ function StageControls({ stage }: { stage: StageId }) {
         {doc.flat ? (
           <div className="space-y-1">
             <SliderField label="强度" value={doc.params.flat.strength} min={0} max={100} unit="%" onChange={(v) => updateStageAndRender('flat', { strength: v })} />
-            <div className="kv"><span>通道均值</span><span className="mono">{doc.flat.stats.means.map((v) => v.toFixed(3)).join(' / ')}</span></div>
-            <div className="kv"><span>有效像素</span><span className="mono">{doc.flat.stats.validFraction.map((v) => (v * 100).toFixed(1) + '%').join(' / ')}</span></div>
+            <div className="kv"><span>通道均值</span><span className="mono">{mono ? doc.flat.stats.means[0].toFixed(3) : doc.flat.stats.means.map((v) => v.toFixed(3)).join(' / ')}</span></div>
+            <div className="kv"><span>有效像素</span><span className="mono">{mono ? (doc.flat.stats.validFraction[0] * 100).toFixed(1) + '%' : doc.flat.stats.validFraction.map((v) => (v * 100).toFixed(1) + '%').join(' / ')}</span></div>
           </div>
         ) : null}
         <div className="grid grid-cols-2 gap-2">
@@ -155,14 +166,22 @@ function StageControls({ stage }: { stage: StageId }) {
   if (stage === 'wb') {
     return (
       <div className="space-y-2">
-        <Vec4Editor label="R / G1 / G2 / B 增益（G=1）" value={doc.params.wb.multipliers} onChange={(v) => updateStageAndRender('wb', { multipliers: v, mode: 'custom' })} min={0} max={16} step={0.001} />
-        <div className="flex gap-2">
-          <Button className="btn-xs" onClick={() => updateStageAndRender('wb', { multipliers: doc.meta.wb.asShot ?? [1, 1, 1, 1], mode: 'as-shot' })}>As Shot</Button>
-          <Button className="btn-xs" onClick={() => updateStageAndRender('wb', { multipliers: [1, 1, 1, 1], mode: 'custom' })}>中性 1:1:1</Button>
-          <Button className="btn-xs" onClick={() => useStore.getState().setTool('gray')} title="点击画布上的灰点，自动计算 WB 增益">灰点</Button>
-        </div>
-        <div className="kv"><span>模式</span><span className="mono">{doc.params.wb.mode}</span></div>
-        <div className="text-[11px] leading-4 text-ink-500">灰点在平场校正后的线性 RAW 上采样，按 G=1 归一化。</div>
+        {mono ? (
+          <div className="rounded border border-ink-700 bg-ink-850 p-2 text-[11px] leading-4 text-ink-400">
+            Y 通道（单色）输入没有彩色白平衡；默认 BYP，倍率固定为 1:1:1:1。
+          </div>
+        ) : (
+          <>
+            <Vec4Editor label="R / G1 / G2 / B 增益（G=1）" value={doc.params.wb.multipliers} onChange={(v) => updateStageAndRender('wb', { multipliers: v, mode: 'custom' })} min={0} max={16} step={0.001} />
+            <div className="flex gap-2">
+              <Button className="btn-xs" onClick={() => updateStageAndRender('wb', { multipliers: doc.meta.wb.asShot ?? [1, 1, 1, 1], mode: 'as-shot' })}>As Shot</Button>
+              <Button className="btn-xs" onClick={() => updateStageAndRender('wb', { multipliers: [1, 1, 1, 1], mode: 'custom' })}>中性 1:1:1</Button>
+              <Button className="btn-xs" onClick={() => useStore.getState().setTool('gray')} title="点击画布上的灰点，自动计算 WB 增益">灰点</Button>
+            </div>
+            <div className="kv"><span>模式</span><span className="mono">{doc.params.wb.mode}</span></div>
+            <div className="text-[11px] leading-4 text-ink-500">灰点在平场校正后的线性 RAW 上采样，按 G=1 归一化。</div>
+          </>
+        )}
       </div>
     );
   }
@@ -370,7 +389,7 @@ export function PipelinePanel({ onClose }: { onClose?: () => void }) {
           <div className="flex items-center justify-between">
             <div className="min-w-0">
               <div className="truncate text-[12px] text-ink-100">{doc.fileName}</div>
-              <div className="mono text-[11px] text-ink-500">{img.geometry.active.w}×{img.geometry.active.h} · {img.cfa.sites.map((x) => x.startsWith('G') ? 'G' : x).join('')} · {img.geometry.bitDepth}bit</div>
+              <div className="mono text-[11px] text-ink-500">{img.geometry.active.w}×{img.geometry.active.h} · {effectivePattern(img.cfa)} · {img.geometry.bitDepth}bit</div>
             </div>
             <span className={`badge ${doc.kind === 'dng' ? 'badge-ok' : ''}`}>{doc.kind.toUpperCase()}</span>
           </div>

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { STAGE_ORDER, bypassStage, createDefaultParams, digitalGainFor, effectiveCcm, effectiveCscTransform, fromPresetParams, migrateParams, paramsHash, stageIsActive, toPresetParams } from '../../src/core/pipeline/params';
 import { IDENTITY3 } from '../../src/core/color/matrices';
 import { createIdentityToneCurvePoints } from '../../src/core/color/tone-curve';
+import { makeCfaLayout } from '../../src/core/raw/cfa';
+import type { RawImage } from '../../src/core/types';
 
 describe('pipeline params', () => {
   it('creates sane defaults without RAW metadata', () => {
@@ -69,6 +71,22 @@ describe('pipeline params', () => {
     expect(p.sharpen.amount).toBe(100);
     expect(p.sharpen.radius).toBeCloseTo(1.2, 5);
     expect(p.sharpen.bypass).toBe(true);
+  });
+
+  it('disables WB and CCM by default for a Y-channel input', () => {
+    const raw = {
+      cfa: makeCfaLayout('Y'),
+      color: { colorMatrix1: [2, 0, 0, 0, 2, 0, 0, 0, 2], tagSource: 'dng', warnings: [] },
+      wb: { asShot: [2, 1, 1, 2], source: 'dng' },
+      geometry: { bitDepth: 12 },
+      levels: { black: [256, 256, 256, 256], white: [4095, 4095, 4095, 4095] },
+    } as unknown as RawImage;
+    const p = createDefaultParams(raw);
+    expect(p.wb.bypass).toBe(true);
+    expect(p.wb.multipliers).toEqual([1, 1, 1, 1]);
+    expect(p.ccm.bypass).toBe(true);
+    expect(p.ccm.source).toBe('identity');
+    expect(effectiveCcm(p)).toEqual(IDENTITY3);
   });
 
   it('round-trips preset params while preserving file-bound fields', () => {

@@ -18,6 +18,7 @@ export function ImportDialog() {
   const [width, setWidth] = React.useState(0);
   const [height, setHeight] = React.useState(0);
   const [cfa, setCfa] = React.useState<CfaPattern>('RGGB');
+  const mono = cfa === 'Y';
   const [bitDepth, setBitDepth] = React.useState<8 | 10 | 12 | 14 | 16>(12);
   const initialLevels = React.useMemo(() => defaultLevelsForBitDepth(12), []);
   const [packingKind, setPackingKind] = React.useState<'unpacked' | 'packed'>('unpacked');
@@ -66,8 +67,8 @@ export function ImportDialog() {
     headerOffset,
     rowStride,
     active: activeW > 0 && activeH > 0 ? { x: activeX, y: activeY, w: activeW, h: activeH } : undefined,
-    black: blackMode === 'scalar' ? blackScalar : blackCfa,
-    white: blackMode === 'scalar' ? whiteScalar : whiteCfa,
+    black: blackMode === 'scalar' || mono ? blackScalar : blackCfa,
+    white: blackMode === 'scalar' || mono ? whiteScalar : whiteCfa,
     endian,
     sampleShift: sampleShift as BareRawConfig['sampleShift'],
     byteLength: file?.size,
@@ -90,7 +91,7 @@ export function ImportDialog() {
     if (!file) { setError('请选择文件'); return; }
     if (tab === 'bare') {
       if (!width || !height) { setError('裸 RAW 必须填写存储宽/高'); return; }
-      if (whiteScalar <= blackScalar && blackMode === 'scalar') { setError('white level 必须大于 black level'); return; }
+      if (whiteScalar <= blackScalar && (blackMode === 'scalar' || mono)) { setError('white level 必须大于 black level'); return; }
     }
     setBusy(true);
     const err = tab === 'dng' ? await importDng(file) : await importBare(file, config());
@@ -134,7 +135,7 @@ export function ImportDialog() {
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <NumberField label="存储宽" value={width} onChange={setWidth} min={1} max={65535} />
                 <NumberField label="存储高" value={height} onChange={setHeight} min={1} max={65535} />
-                <label className="flex flex-col gap-1"><span className="field-label">CFA</span><select className="select" value={cfa} onChange={(e) => setCfa(e.target.value as CfaPattern)}><option>RGGB</option><option>BGGR</option><option>GRBG</option><option>GBRG</option></select></label>
+                <label className="flex flex-col gap-1"><span className="field-label">CFA / 通道</span><select className="select" value={cfa} onChange={(e) => setCfa(e.target.value as CfaPattern)}><option>RGGB</option><option>BGGR</option><option>GRBG</option><option>GBRG</option><option value="Y">Y（单色）</option></select></label>
                 <label className="flex flex-col gap-1"><span className="field-label">位宽</span><select className="select" value={bitDepth} onChange={(e) => changeBitDepth(Number(e.target.value) as typeof bitDepth)}><option value={8}>8</option><option value={10}>10</option><option value={12}>12</option><option value={14}>14</option><option value={16}>16</option></select></label>
               </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -158,14 +159,14 @@ export function ImportDialog() {
                 <NumberField label="active h (0=full)" value={activeH} onChange={setActiveH} min={0} />
               </div>
               <div className="rounded border border-ink-700 p-2">
-                <div className="mb-2 flex items-center justify-between"><span className="field-label">黑/白电平</span><Segmented value={blackMode} onChange={setBlackMode} options={[{ value: 'scalar', label: '标量' }, { value: 'cfa', label: '逐 CFA' }]} /></div>
+                <div className="mb-2 flex items-center justify-between"><span className="field-label">黑/白电平</span>{mono ? <span className="text-[10px] text-ink-500">单通道 Y</span> : <Segmented value={blackMode} onChange={setBlackMode} options={[{ value: 'scalar', label: '标量' }, { value: 'cfa', label: '逐 CFA' }]} />}</div>
                 <div className="mb-2 text-[11px] leading-4 text-ink-500">
                   默认按位宽填充：10-bit 64/1023，12-bit 256/4095；切换位宽会重置为默认值。
                 </div>
-                {blackMode === 'scalar' ? (
+                {blackMode === 'scalar' || mono ? (
                   <div className="grid grid-cols-2 gap-2">
-                    <NumberField label="black DN" value={blackScalar} onChange={setBlackScalar} min={0} />
-                    <NumberField label="white DN" value={whiteScalar} onChange={setWhiteScalar} min={1} />
+                    <NumberField label={mono ? 'black DN (Y)' : 'black DN'} value={blackScalar} onChange={setBlackScalar} min={0} />
+                    <NumberField label={mono ? 'white DN (Y)' : 'white DN'} value={whiteScalar} onChange={setWhiteScalar} min={1} />
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-3">
@@ -187,7 +188,7 @@ export function ImportDialog() {
                 </div>
               ) : null}
               <div className="text-[11px] leading-4 text-ink-500">
-                支持：8-bit unpacked；10/12/14/16-bit u16 LE/BE 右/左对齐；10/12/14-bit 连续 LSB/MSB；MIPI RAW10/12/14。错误配置会在解码时给出字节差、通道统计与建议。
+                支持：8-bit unpacked；10/12/14/16-bit u16 LE/BE 右/左对齐；10/12/14-bit 连续 LSB/MSB；MIPI RAW10/12/14；Y 为单色亮度通道。错误配置会在解码时给出字节差、通道统计与建议。
               </div>
             </div>
           )}

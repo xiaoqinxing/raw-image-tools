@@ -109,6 +109,7 @@ uniform sampler2D uIn;
 uniform ivec2 uSize;
 uniform ivec4 uSites;
 uniform int uAlgorithm;
+uniform int uMono;
 out vec4 outColor;
 
 int siteAt(ivec2 p) {
@@ -152,6 +153,10 @@ void main() {
   if (p.x >= uSize.x || p.y >= uSize.y) discard;
   int c = siteAt(p);
   float center = f(p);
+  if (uMono == 1) {
+    outColor = vec4(center, center, center, 1.0);
+    return;
+  }
   float r = center, g = center, b = center;
   if (uAlgorithm == 0) {
     float gAvg = (f(p + ivec2(-1, 0)) + f(p + ivec2(1, 0)) + f(p + ivec2(0, -1)) + f(p + ivec2(0, 1))) * 0.25;
@@ -451,6 +456,7 @@ uniform int uShowClipping;
 uniform int uLinearDisplay;
 uniform int uInterp;
 uniform ivec4 uCfaSites;
+uniform int uMono;
 uniform float uSplit;
 uniform float uFlicker;
 uniform float uDiffGain;
@@ -500,7 +506,7 @@ void main() {
     float v = clamp(s.r, 0.0, 1.0);
     if (uFalseColor == 1) {
       int c = uCfaSites[(int(img.y) & 1) * 2 + (int(img.x) & 1)];
-      col = cfaColor(c) * pow(v, 1.0 / 2.2);
+      col = (uMono == 1 ? vec3(0.92, 0.88, 0.72) : cfaColor(c)) * pow(v, 1.0 / 2.2);
     } else {
       col = vec3(pow(v, 1.0 / 2.2));
     }

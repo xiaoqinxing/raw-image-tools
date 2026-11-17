@@ -3,7 +3,7 @@ import { Buffer } from 'node:buffer';
 export interface TestDngOptions {
   width: number;
   height: number;
-  cfa?: 'RGGB' | 'BGGR' | 'GRBG' | 'GBRG';
+  cfa?: 'RGGB' | 'BGGR' | 'GRBG' | 'GBRG' | 'Y';
   black?: number;
   white?: number;
   colorMatrix?: number[];
@@ -53,6 +53,7 @@ const CFA_MAP = {
   BGGR: [2, 1, 1, 0],
   GRBG: [1, 0, 2, 1],
   GBRG: [1, 2, 0, 1],
+  Y: [0, 0, 0, 0],
 } as const;
 
 /** Minimal uncompressed DNG writer for tests only. */
@@ -65,6 +66,7 @@ export function makeTestDng(opts: TestDngOptions): Buffer {
       case 'BGGR': return [3, 2, 2, 0];
       case 'GRBG': return [1, 0, 3, 2];
       case 'GBRG': return [2, 3, 0, 1];
+      case 'Y': return [0, 0, 0, 0];
     }
   })();
   const black = opts.black ?? 0;
@@ -101,7 +103,7 @@ export function makeTestDng(opts: TestDngOptions): Buffer {
   add(50706, byte([1, 4, 0, 0]));
   add(50707, byte([1, 1, 0, 0]));
   add(50708, ascii('RawLab Synthetic'));
-  add(50710, byte([0, 1, 2]));
+  add(50710, byte(cfa === 'Y' ? [0] : [0, 1, 2]));
   add(50711, short(1));
   add(50713, short([1, 1]));
   add(50714, short(black));

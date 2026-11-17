@@ -25,7 +25,8 @@ function display(v: number, scale: 'linear' | 'gamma', domain: string): number {
 export function computeWaveform(input: WaveformInput): Omit<WaveformResult, keyof import('../types').AnalysisMeta> & { kind: 'waveform' } {
   const { width, height, data, domain, cfa } = input;
   const bins = 256;
-  const wfWidth = input.mode === 'parade' ? width * 3 : width;
+  const mono = domain === 'raw-cfa' && !!cfa && cfa.pattern === 'Y';
+  const wfWidth = input.mode === 'parade' && !mono ? width * 3 : width;
   const counts = new Uint32Array(wfWidth * bins);
   const add = (x: number, v: number, channelOffset: number) => {
     const d = display(v, input.scale, domain);
@@ -38,7 +39,7 @@ export function computeWaveform(input: WaveformInput): Omit<WaveformResult, keyo
       if (domain === 'raw-cfa' && cfa) {
         const ch = cfaChannelAt(cfa, x, y);
         const v = data[i];
-        if (input.mode === 'parade') {
+        if (input.mode === 'parade' && !mono) {
           const off = ch === 0 ? 0 : ch === 3 ? width * 2 : width;
           add(x, v, off);
         } else {
@@ -65,7 +66,7 @@ export function computeWaveform(input: WaveformInput): Omit<WaveformResult, keyo
       const o = (y * wfWidth + x) * 4;
       if (input.mode === 'parade') {
         const channel = x < width ? 0 : x < width * 2 ? 1 : 2;
-        const tint = channel === 0 ? [1, 0.25, 0.25] : channel === 1 ? [0.25, 1, 0.35] : [0.3, 0.45, 1];
+        const tint = mono ? [0.82, 0.86, 0.9] : channel === 0 ? [1, 0.25, 0.25] : channel === 1 ? [0.25, 1, 0.35] : [0.3, 0.45, 1];
         rgba[o] = tint[0] * intensity * 255;
         rgba[o + 1] = tint[1] * intensity * 255;
         rgba[o + 2] = tint[2] * intensity * 255;

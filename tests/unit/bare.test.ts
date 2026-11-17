@@ -108,6 +108,18 @@ describe('bare RAW decoder', () => {
     expect(Array.from(raw.data)).toEqual(values);
   });
 
+  it('decodes Y-channel input as a monochrome layout', () => {
+    const { buffer, cfg } = makeConfig(w, h, 'Y', 12, { kind: 'unpacked', container: 'u16', endian: 'le', alignment: 'right' }, values);
+    const raw = decodeBareRaw(buffer, cfg);
+    expect(raw.cfa.pattern).toBe('Y');
+    expect(raw.cfa.sites).toEqual(['Y', 'Y', 'Y', 'Y']);
+    expect(raw.cfa.siteChannels).toEqual([0, 0, 0, 0]);
+    expect(Array.from(raw.data)).toEqual(values);
+    expect(raw.diagnostics.perChannel.map((c) => c.channel)).toEqual(['Y']);
+    expect(raw.diagnostics.cfaConsistency).toBe(1);
+    expect(raw.wb.asShot).toEqual([1, 1, 1, 1]);
+  });
+
   for (const bits of [10, 12, 14] as const) {
     for (const order of ['lsb', 'msb'] as const) {
       it(`decodes packed ${bits}-bit ${order}`, () => {

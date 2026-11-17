@@ -36,6 +36,7 @@ function mapLibRawBlack(lr: LibRaw, pattern: CfaPattern | null): Vec4 {
       return 0;
     }
   });
+  if (pattern === 'Y') return [raw[0], raw[0], raw[0], raw[0]];
   if (!pattern) return raw as Vec4;
   // LibRaw indexes channels in its internal order (usually R,G1,G2,B for Bayer).
   return raw as Vec4;
@@ -57,6 +58,10 @@ function mapLibRawWhite(lr: LibRaw, pattern: CfaPattern | null): Vec4 {
     }
   })();
   const fallback = max > 0 ? max : 65535;
+  if (pattern === 'Y') {
+    const v = linear[0] > 0 ? linear[0] : fallback;
+    return [v, v, v, v];
+  }
   const out = linear.map((v) => (v > 0 ? v : fallback)) as Vec4;
   return out;
 }
@@ -103,8 +108,16 @@ export async function decodeDng(buffer: ArrayBuffer, opts: DngDecodeOptions): Pr
     const pitch = lr.getRawPitch();
     const cdesc = lr.getIParams().cdesc;
     const filters = lr.getFilters();
-    const librawPattern = patternFromCdesc(cdesc) ?? patternFromFilters(filters);
-    const cfaPattern = meta?.cfaPattern ?? librawPattern ?? 'RGGB';
+    const colors = (() => {
+      try { return lr.getColors(); } catch { return 0; }
+    })();
+    const librawPattern = patternFromCdesc(cdesc)
+      ?? (filters === 0 && colors > 1 ? null : patternFromFilters(filters));
+    const metaPattern = meta?.cfaPattern;
+    const mono = metaPattern
+      ? metaPattern === 'Y'
+      : librawPattern === 'Y' || (librawPattern === null && colors === 1);
+    const cfaPattern: CfaPattern = mono ? 'Y' : metaPattern ?? librawPattern ?? 'RGGB';
 
     const activeOnly = raw.length === activeW * activeH && rawW * rawH !== activeW * activeH;
     let storedWidth: number;
@@ -153,11 +166,12 @@ export async function decodeDng(buffer: ArrayBuffer, opts: DngDecodeOptions): Pr
     };
 
     let asShot: Vec4 | null = normalizeWb(meta?.asShotNeutral ?? null);
+    if (mono) asShot = null;
     if (!asShot) {
       const mul = [0, 1, 2, 3].map((i) => {
         try { return lr.getCamMul(i); } catch { return 0; }
       });
-      if (mul.some((v) => v > 0)) {
+      if (!mono && mul.some((v) => v > 0)) {
         const g = mul[1] || 1;
         asShot = [mul[0] / g || 1, 1, 1, mul[2] / g || 1];
       }

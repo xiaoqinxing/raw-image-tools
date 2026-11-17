@@ -1,5 +1,6 @@
-export type CfaPattern = 'RGGB' | 'BGGR' | 'GRBG' | 'GBRG';
-export type ChannelId = 'R' | 'G1' | 'G2' | 'B';
+/** `Y` is a monochrome / luminance-only sensor with no colour filter array. */
+export type CfaPattern = 'RGGB' | 'BGGR' | 'GRBG' | 'GBRG' | 'Y';
+export type ChannelId = 'R' | 'G1' | 'G2' | 'B' | 'Y';
 export type BitDepth = 8 | 10 | 12 | 14 | 16;
 
 export interface Point {
@@ -81,7 +82,7 @@ export interface CfaLayout {
   pattern: CfaPattern;
   sites: [ChannelId, ChannelId, ChannelId, ChannelId];
   phaseOrigin: Point;
-  /** Canonical channel index per 2x2 site: 0=R, 1=G1, 2=G2, 3=B */
+  /** Canonical channel index per 2x2 site: 0=R, 1=G1, 2=G2, 3=B; Y uses slot 0. */
   siteChannels: [number, number, number, number];
 }
 
@@ -446,10 +447,12 @@ export interface HistogramResult extends AnalysisMeta {
   min: number;
   max: number;
   mean: number;
-  /** ROI means in the same domain as the histogram bins (R/G/B). */
+  /** ROI means in the same domain as the histogram bins (R/G/B; equal values for a Y input). */
   channelMeans: [number, number, number];
   /** R:G:B ratio with green normalized to 1. */
   channelRatios: [number, number, number];
+  /** True when the analysed raw-cfa area is a single Y channel. */
+  mono?: boolean;
   scale: 'linear' | 'log';
 }
 

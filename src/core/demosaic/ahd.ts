@@ -20,6 +20,15 @@ const HALO = 2;
 export function demosaicAHD(src: CfaPlane): RgbPlane {
   const { width: w, height: h, data, cfa } = src;
   const out = new Float32Array(w * h * 3);
+  if (cfa.pattern === 'Y') {
+    for (let i = 0; i < w * h; i++) {
+      const v = data[i];
+      out[i * 3] = v;
+      out[i * 3 + 1] = v;
+      out[i * 3 + 2] = v;
+    }
+    return { width: w, height: h, data: out };
+  }
 
   const sample = (x: number, y: number): number => {
     const xx = x < 0 ? 0 : x >= w ? w - 1 : x;

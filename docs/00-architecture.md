@@ -164,8 +164,8 @@ Commit (slider release / 导出 / 分析)
 ### 4.1 基础类型
 
 ```ts
-type CfaPattern = 'RGGB' | 'BGGR' | 'GRBG' | 'GBRG';
-type ChannelId = 'R' | 'G1' | 'G2' | 'B';
+type CfaPattern = 'RGGB' | 'BGGR' | 'GRBG' | 'GBRG' | 'Y';
+type ChannelId = 'R' | 'G1' | 'G2' | 'B' | 'Y';
 type BitDepth = 8 | 10 | 12 | 14 | 16;
 type Rect = { x: number; y: number; w: number; h: number };
 type Point = { x: number; y: number };
@@ -182,6 +182,7 @@ interface CfaLayout {
 
 // 注意：active.x / active.y 为奇数时，裁剪后 2x2 CFA 相位会翻转。
 // 解码器必须基于 active 原点重新计算 sites，不能直接把存储图案当作有效图案。
+// Y 表示单色/亮度输入：四个 sites 均为 Y，共享 Vec4 的 slot 0，去马赛克直接复制亮度。
 ```
 
 ### 4.2 RawImage
