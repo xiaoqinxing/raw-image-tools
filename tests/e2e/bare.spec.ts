@@ -42,7 +42,9 @@ test('imports a bare Y-channel RAW as monochrome', async ({ page }) => {
   expect(cfa.pattern).toBe('Y');
   expect(cfa.sites).toEqual(['Y', 'Y', 'Y', 'Y']);
   await page.locator('.analysis-collapse').click();
-  await expect(page.getByText(/Y 均值/).first()).toBeVisible({ timeout: 30_000 });
+  await page.locator('.analysis-controls select').selectOption('levels');
+  await expect(page.getByTestId('histogram-stats')).toContainText('单色输入', { timeout: 30_000 });
+  await expect(page.getByText('64×48 · Y · 12bit').first()).toBeVisible();
 });
 
 test('imports a bare RAW and reports bad configuration', async ({ page }) => {
