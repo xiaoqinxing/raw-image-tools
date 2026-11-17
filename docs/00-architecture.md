@@ -182,7 +182,7 @@ interface CfaLayout {
 
 // 注意：active.x / active.y 为奇数时，裁剪后 2x2 CFA 相位会翻转。
 // 解码器必须基于 active 原点重新计算 sites，不能直接把存储图案当作有效图案。
-// Y 表示单色/亮度输入：四个 sites 均为 Y，共享 Vec4 的 slot 0，去马赛克直接复制亮度。
+// Y 表示单色/亮度输入：四个 sites 均为 Y，共享 Vec4 的 slot 0；默认去马赛克 BYP，在进入 RGB 阶段前直接展开为等值 R/G/B。
 ```
 
 ### 4.2 RawImage

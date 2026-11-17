@@ -73,7 +73,7 @@ describe('pipeline params', () => {
     expect(p.sharpen.bypass).toBe(true);
   });
 
-  it('disables WB and CCM by default for a Y-channel input', () => {
+  it('disables demosaic, WB and CCM by default for a Y-channel input', () => {
     const raw = {
       cfa: makeCfaLayout('Y'),
       color: { colorMatrix1: [2, 0, 0, 0, 2, 0, 0, 0, 2], tagSource: 'dng', warnings: [] },
@@ -86,7 +86,12 @@ describe('pipeline params', () => {
     expect(p.wb.multipliers).toEqual([1, 1, 1, 1]);
     expect(p.ccm.bypass).toBe(true);
     expect(p.ccm.source).toBe('identity');
+    expect(p.demosaic.bypass).toBe(true);
     expect(effectiveCcm(p)).toEqual(IDENTITY3);
+    // The demosaic stage is BYP, but a Y plane can still feed the RGB stages.
+    expect(stageIsActive(p, 'gamma', false, true)).toBe(true);
+    expect(stageIsActive(p, 'csc', false, true)).toBe(true);
+    expect(stageIsActive(p, 'gamma', false, false)).toBe(false);
   });
 
   it('round-trips preset params while preserving file-bound fields', () => {

@@ -104,6 +104,18 @@ void main() {
 }
 `;
 
+export const MONO_EXPAND_FRAG = `${COMMON_HEADER}
+uniform sampler2D uIn;
+uniform ivec2 uSize;
+out vec4 outColor;
+void main() {
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  if (p.x >= uSize.x || p.y >= uSize.y) discard;
+  float v = texelFetch(uIn, p, 0).r;
+  outColor = vec4(v, v, v, 1.0);
+}
+`;
+
 export const DEMOSAIC_FRAG = `${COMMON_HEADER}
 uniform sampler2D uIn;
 uniform ivec2 uSize;

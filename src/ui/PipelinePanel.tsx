@@ -19,7 +19,7 @@ function StageRow({ stage, index }: { stage: StageId; index: number }) {
   const [open, setOpen] = React.useState(stage === 'levels' || stage === 'wb' || stage === 'digitalGain' || stage === 'demosaic' || stage === 'ccm' || stage === 'toneCurve' || stage === 'csc');
   if (!doc) return null;
   const p = doc.params[stage] as { bypass: boolean };
-  const runnable = stageIsActive(doc.params, stage, !!doc.flat);
+  const runnable = stageIsActive(doc.params, stage, !!doc.flat, doc.meta.cfa.pattern === 'Y');
   const time = doc.stats?.timings.stages[stage];
   const active = selectedStage === stage;
   return (
@@ -207,21 +207,29 @@ function StageControls({ stage }: { stage: StageId }) {
   if (stage === 'demosaic') {
     return (
       <div className="space-y-2">
-        <Segmented
-          value={doc.params.demosaic.algorithm}
-          onChange={(v) => updateStageAndRender('demosaic', { algorithm: v })}
-          options={[
-            { value: 'mhc', label: 'Fast · MHC' },
-            { value: 'bilinear', label: 'Fast · Bilinear' },
-            { value: 'ahd', label: 'Quality · AHD' },
-          ]}
-        />
-        {doc.params.demosaic.algorithm === 'ahd' ? (
-          <div className="rounded border border-[#5c4a24] bg-[#332713] p-2 text-[11px] leading-4 text-[#ffca7a]">
-            AHD 在 Render Worker 内以 CPU 执行（净室 AHD 近似）；全分辨率 24MP 目标不到 3s，进度/取消将在下一轮优化。
+        {mono ? (
+          <div className="rounded border border-ink-700 bg-ink-850 p-2 text-[11px] leading-4 text-ink-400">
+            Y 通道（单色）输入无需去马赛克：默认 BYP，亮度在进入 RGB 阶段前直接展开为等值 R/G/B。
           </div>
-        ) : null}
-        <div className="text-[11px] leading-4 text-ink-500">MHC 为 5×5 Malvar-He-Cutler，GPU；AHD 为方向性 homogeneous 选择，Worker/CPU。</div>
+        ) : (
+          <>
+            <Segmented
+              value={doc.params.demosaic.algorithm}
+              onChange={(v) => updateStageAndRender('demosaic', { algorithm: v })}
+              options={[
+                { value: 'mhc', label: 'Fast · MHC' },
+                { value: 'bilinear', label: 'Fast · Bilinear' },
+                { value: 'ahd', label: 'Quality · AHD' },
+              ]}
+            />
+            {doc.params.demosaic.algorithm === 'ahd' ? (
+              <div className="rounded border border-[#5c4a24] bg-[#332713] p-2 text-[11px] leading-4 text-[#ffca7a]">
+                AHD 在 Render Worker 内以 CPU 执行（净室 AHD 近似）；全分辨率 24MP 目标不到 3s，进度/取消将在下一轮优化。
+              </div>
+            ) : null}
+            <div className="text-[11px] leading-4 text-ink-500">MHC 为 5×5 Malvar-He-Cutler，GPU；AHD 为方向性 homogeneous 选择，Worker/CPU。</div>
+          </>
+        )}
       </div>
     );
   }

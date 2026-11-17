@@ -152,7 +152,7 @@ export function createDefaultParams(raw?: RawImage): PipelineParams {
       global: 1,
     },
     demosaic: {
-      bypass: false,
+      bypass: mono,
       algorithm: 'mhc',
     },
     denoise: {
@@ -214,17 +214,20 @@ export function setStageBypass(p: PipelineParams, stage: StageId, bypass: boolea
   return out;
 }
 
-export function stageIsActive(p: PipelineParams, stage: StageId, hasFlat: boolean): boolean {
+export function stageIsActive(p: PipelineParams, stage: StageId, hasFlat: boolean, mono = false): boolean {
   if (stage === 'levels') return true;
   if (stage === 'flat') return !p.flat.bypass && hasFlat;
   if (p[stage].bypass) return false;
   if (stage === 'wb' || stage === 'digitalGain' || stage === 'demosaic') return true;
+  // A Y plane can be expanded to RGB without demosaicing, so the colour stages
+  // remain available even when the demosaic stage is bypassed.
+  const rgbAvailable = mono || !p.demosaic.bypass;
   if (stage === 'denoise' || stage === 'ccm' || stage === 'gamma') {
-    return !p.demosaic.bypass;
+    return rgbAvailable;
   }
-  if (stage === 'toneCurve') return !p.demosaic.bypass && !p.gamma.bypass;
-  if (stage === 'csc') return !p.demosaic.bypass && !p.gamma.bypass;
-  if (stage === 'sharpen') return !p.demosaic.bypass && !p.gamma.bypass;
+  if (stage === 'toneCurve') return rgbAvailable && !p.gamma.bypass;
+  if (stage === 'csc') return rgbAvailable && !p.gamma.bypass;
+  if (stage === 'sharpen') return rgbAvailable && !p.gamma.bypass;
   return false;
 }
 

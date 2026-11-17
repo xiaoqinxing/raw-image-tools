@@ -214,7 +214,7 @@ npm run build
 ## 已知限制
 
 - AHD 是净室方向性近似实现，不是 GPL 参考实现逐行移植；RCD 尚未实现。
-- Y 通道（单色）输入没有色彩信息：去马赛克直接复制亮度，WB/CCM 默认 BYP，ColorChecker 拟合不可用。
+- Y 通道（单色）输入没有色彩信息：去马赛克默认 BYP，亮度在进入 RGB 阶段前直接展开；WB/CCM 默认 BYP，ColorChecker 拟合不可用。
 - 色调曲线是显示域 1D 单调曲线，不含 Lightroom 的参数曲线分区、HSL/颜色分级或局部蒙版；LUT 默认 4096 点并受 `MAX_TEXTURE_SIZE` 限制。
 - DNG 的 OpcodeList、LinearizationTable、BlackLevelDeltaH/V 不执行，只提示。
 - 16-bit PNG 不写 ICC profile；颜色按当前 display-sRGB 值量化。

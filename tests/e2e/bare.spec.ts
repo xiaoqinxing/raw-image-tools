@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 import path from 'node:path';
+import fs from 'node:fs';
+import { PNG } from 'pngjs';
 
 const fixture = path.resolve('tests/fixtures/test-flat.raw');
 
@@ -41,10 +43,31 @@ test('imports a bare Y-channel RAW as monochrome', async ({ page }) => {
   });
   expect(cfa.pattern).toBe('Y');
   expect(cfa.sites).toEqual(['Y', 'Y', 'Y', 'Y']);
+  const demosaicBypass = await page.evaluate(() => {
+    const s = window.__rawlab.useStore.getState();
+    return s.docs[s.activeId!].params.demosaic.bypass;
+  });
+  expect(demosaicBypass).toBe(true);
+  await expect(page.locator('.stage-row').filter({ hasText: '去马赛克' }).locator('.badge')).toHaveText('BYP');
+  await expect(page.locator('.stage-row').filter({ hasText: 'Gamma' }).locator('.badge')).toHaveText('ON');
   await page.locator('.analysis-collapse').click();
   await page.locator('.analysis-controls select').selectOption('levels');
   await expect(page.getByTestId('histogram-stats')).toContainText('单色输入', { timeout: 30_000 });
   await expect(page.getByText('64×48 · Y · 12bit').first()).toBeVisible();
+
+  // The demosaic stage is bypassed, but the Y plane must still expand into a
+  // neutral RGB output through the remaining display stages.
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: '导出', exact: true }).first().click();
+  await page.getByRole('button', { name: '8-bit sRGB（默认）' }).click();
+  await page.getByRole('button', { name: '导出', exact: true }).last().click();
+  const png = PNG.sync.read(fs.readFileSync(await (await downloadPromise).path()!));
+  expect(png.width).toBe(64);
+  expect(png.height).toBe(48);
+  for (let i = 0; i < png.data.length; i += 4) {
+    expect(png.data[i]).toBe(png.data[i + 1]);
+    expect(png.data[i + 1]).toBe(png.data[i + 2]);
+  }
 });
 
 test('imports a bare RAW and reports bad configuration', async ({ page }) => {

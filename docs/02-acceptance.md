@@ -44,7 +44,7 @@ viewport 1440×900 / 1024×768 / 390×844 / 844×390，`deviceScaleFactor=1`。
 - CIEDE2000 Sharma 40 组标准向量（误差 < 1e-3）。
 - 色彩矩阵求逆、Bradford D50→D65、sRGB 传递函数往返。
 - 裸 RAW：u16 LE/BE、左/右对齐、packed 10/12/14-bit LSB/MSB、MIPI RAW10/12/14、header/stride/active crop/CFA 相位、截断与非法电平。
-- Y 单色：CFA 布局归一为单通道、LibRaw cdesc/filters 与 DNG 统一 CFAPattern 识别、Bilinear/MHC/AHD 直接复制亮度、raw-cfa 直方图与 SNR 只输出 Y。
+- Y 单色：CFA 布局归一为单通道、LibRaw cdesc/filters 与 DNG 统一 CFAPattern 识别、去马赛克默认 BYP 且亮度直接展开为 RGB、raw-cfa 直方图与 SNR 只输出 Y。
 - 黑白电平默认：按位宽生成 1/16 满量程黑电平与 $2^{bits}-1$ 白电平（10-bit 64/1023，12-bit 256/4095）。
 - 分析 ROI 裁剪：预览坐标映射、raw-cfa 偶数像素对齐、无 ROI 时全图透传。
 - ColorChecker：透视网格采样 + 非对称相机矩阵往返；拟合 mean ΔE00 < 0.1（转置回归）；曝光 ×0.6/×1.6、WB 偏 R1.3/B0.8 时仍 <0.1；逐块权重 0 不参与拟合；目标饱和度/色调与标准指标；底部四中性块 WB 不把不同灰度误判为光照不均。
@@ -140,7 +140,7 @@ AHD Quality：
 2. AHD 是方向性近似，不是参考实现；RCD 未实现。
 3. DNG OpcodeList / LinearizationTable / BlackLevelDelta 不执行。
 4. 16-bit PNG 不写 ICC；显示链路固定 sRGB。
-5. Y 通道（单色）输入没有色彩信息：WB/CCM 默认 BYP，ColorChecker 拟合不可用；去马赛克直接复制亮度。
+5. Y 通道（单色）输入没有色彩信息：去马赛克默认 BYP，亮度直接展开；WB/CCM 默认 BYP，ColorChecker 拟合不可用。
 5. File System Access API 持久化句柄未接入；工程重开依赖文件选择器。
 6. 冷启动与硬件 GPU 的 present 性能需要在目标桌面环境复测。
 7. `window.prompt` 命名预设/工程在部分浏览器策略下可能被拦截，后续改为 Radix Dialog。

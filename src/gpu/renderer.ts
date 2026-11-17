@@ -30,6 +30,7 @@ import {
   LUMA_FRAG,
   MATRIX_FRAG,
   MOMENTS_FRAG,
+  MONO_EXPAND_FRAG,
   TONE_CURVE_FRAG,
   USM_COMBINE_FRAG,
   WB_FRAG,
@@ -472,8 +473,23 @@ export class Renderer {
     cache.keys[stage] = this.stageKey(params, stage, width, height, preview);
   }
 
-  private runQualityDemosaic(preview: boolean, params: PipelineParams, display = true): void {
-    if (!this.raw) throw new Error('没有 RAW');
+  /**
+   * A Y sensor has no colour mosaic, so bypassing the demosaic stage must not
+   * drop the colour pipeline. Expand the single-channel plane to RGB once
+   * before denoise/CCM/gamma; the demosaic stage itself stays BYP in the UI.
+   */
+  private renderMonoExpand(input: RenderTexture, cache: StageCache, width: number, height: number): RenderTexture {
+    const gl = this.gl;
+    const out = this.getTemp(cache, 'mono:expand', width, height, 'rgba16f');
+    const p = this.use('monoExpand', MONO_EXPAND_FRAG);
+    this.target(out);
+    this.bindTex(p, 'uIn', input.texture, 0);
+    gl.uniform2i(this.u(p, 'uSize'), width, height);
+    this.draw();
+    return out;
+  }
+
+  private runQualityDemosaic(preview: boolean, params: PipelineParams, display = true): void {    if (!this.raw) throw new Error('没有 RAW');
     const raw = preview ? this.previewRaw : this.fullRaw;
     const tex = preview ? this.rawPreviewTex : this.rawFullTex;
     if (!raw || !tex) throw new Error('RAW 纹理未初始化');
@@ -505,12 +521,13 @@ export class Renderer {
     if (stage === 'wb') return !params.wb.bypass;
     if (stage === 'digitalGain') return !params.digitalGain.bypass;
     if (stage === 'demosaic') return !params.demosaic.bypass;
-    if (stage === 'denoise') return !params.denoise.bypass && !params.demosaic.bypass;
-    if (stage === 'ccm') return !params.ccm.bypass && !params.demosaic.bypass;
-    if (stage === 'gamma') return !params.gamma.bypass && !params.demosaic.bypass;
-    if (stage === 'toneCurve') return !params.toneCurve.bypass && !params.gamma.bypass && !params.demosaic.bypass;
-    if (stage === 'csc') return !params.csc.bypass && !params.gamma.bypass && !params.demosaic.bypass;
-    if (stage === 'sharpen') return !params.sharpen.bypass && !params.gamma.bypass && !params.demosaic.bypass;
+    const rgbAvailable = !params.demosaic.bypass || this.raw?.cfa.pattern === 'Y';
+    if (stage === 'denoise') return !params.denoise.bypass && rgbAvailable;
+    if (stage === 'ccm') return !params.ccm.bypass && rgbAvailable;
+    if (stage === 'gamma') return !params.gamma.bypass && rgbAvailable;
+    if (stage === 'toneCurve') return !params.toneCurve.bypass && !params.gamma.bypass && rgbAvailable;
+    if (stage === 'csc') return !params.csc.bypass && !params.gamma.bypass && rgbAvailable;
+    if (stage === 'sharpen') return !params.sharpen.bypass && !params.gamma.bypass && rgbAvailable;
     return false;
   }
 
@@ -562,6 +579,15 @@ export class Renderer {
           delete cache.stages[stage];
           delete cache.keys[stage];
           this.clearDownstream(cache, i + 1);
+        }
+        if (
+          stage === 'demosaic'
+          && targetIndex > i
+          && this.raw?.cfa.pattern === 'Y'
+          && prev
+          && STAGE_ORDER.slice(i + 1, targetIndex + 1).some((s) => this.stageActive(params, s))
+        ) {
+          prev = this.renderMonoExpand(prev, cache, width, height);
         }
         continue;
       }
